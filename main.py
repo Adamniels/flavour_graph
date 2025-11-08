@@ -124,8 +124,8 @@ def setup_graph(min_edge_weight: float = 5.0) -> nx.DiGraph:
     read_in_products_information(G)
     fill_in_sales_information(G, min_weight_threshold=min_edge_weight)
     
-    # Add fallback edges for isolated nodes based on category matching
-    add_fallback_edges_by_category(G)
+    # Always add subcategory-based connections - all products in same category are connected
+    add_subcategory_connections(G)
     
     return G
 
@@ -201,12 +201,10 @@ def read_in_products_information(G: nx.DiGraph):
         # Get subcategory from parquet data
         subcategory = ean_to_subcategory.get(product_id, 'Unknown')
         
-        # Build tags list including both GPC category and subcategory
+        # Build tags list - subcategory is NOT a tag, it's a separate attribute
         tags = []
         if gpc_category_name:
             tags.append(gpc_category_name)
-        if subcategory and subcategory != 'Unknown':
-            tags.append(subcategory)  # Add subcategory to tags for matching
         
         # Add node with attributes including subcategory
         attrs = {
@@ -216,7 +214,7 @@ def read_in_products_information(G: nx.DiGraph):
             'gpcCategoryName': gpc_category_name,
             'fullIngredientStatement': full_ingredient_statement,
             'name': product_name,
-            'subcategory': subcategory  # Keep for coloring
+            'subcategory': subcategory  # Separate attribute, not a tag
         }
         
         G.add_node(product_id, **attrs)
@@ -284,12 +282,12 @@ def create_priority_list_from_sales(G: nx.DiGraph, sales_file: str = None) -> In
     return priority_list
 
 
-def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 5.0):
+def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 4.0):
     """Compute and add weighted edges between all product pairs based on similarity.
     
     Args:
         G: The graph to add edges to
-        min_weight_threshold: Minimum total weight required to create an edge (default: 5.0)
+        min_weight_threshold: Minimum total weight required to create an edge (default: 4.0)
                             Lower values = more edges, higher values = more selective
     """
     # Initialize UserGroupWeight for co-purchase data (only once!)
@@ -338,95 +336,70 @@ def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 5.0):
     print(f"Added {edges_added} edges (skipped {edges_skipped} weak connections with weight < {min_weight_threshold})")
 
 
-def add_fallback_edges_by_category(G: nx.DiGraph, min_connections: int = 5):
-    """Add edges for nodes with few connections by connecting them with products in the same category.
+def add_subcategory_connections(G: nx.DiGraph):
+    """Add connections between all products in the same subcategory.
     
-    This ensures products in the same subcategory (e.g., different chips) 
-    get connected even if they don't share ingredients.
-    Strategy:
-    1. Find all nodes with fewer than min_connections outgoing edges
-    2. For each such node, find other products with the same subcategory or tags
-    3. Create connections to reach at least min_connections products in the same category
-    
-    Args:
-        G: NetworkX directed graph
-        min_connections: Minimum number of connections a node should have (default: 5)
+    This function ensures that products with the same subcategory are always connected,
+    regardless of ingredient or tag similarity. The connection weight is based on
+    ingredients and tags only (subcategory is not counted as a tag).
     """
+    # Initialize UserGroupWeight for co-purchase data
+    from models import UserGroupWeight
+    ugw = UserGroupWeight()
+    
     nodes = list(G.nodes(data=True))
     edges_added = 0
-    nodes_processed = 0
     
-    print(f"\nAdding fallback edges for nodes with < {min_connections} connections based on category...")
+    print("\nAdding subcategory-based connections...")
     
+    # Group nodes by subcategory
+    subcategory_groups = {}
     for node_id, node_data in nodes:
-        # Only process nodes with fewer than min_connections outgoing edges
-        current_connections = G.out_degree(node_id)
-        if current_connections >= min_connections:
-            continue
+        subcategory = node_data.get('subcategory', 'Unknown')
+        if subcategory != 'Unknown':
+            if subcategory not in subcategory_groups:
+                subcategory_groups[subcategory] = []
+            subcategory_groups[subcategory].append((node_id, node_data))
+    
+    # For each subcategory group, connect all products to each other
+    for subcategory, products in subcategory_groups.items():
+        if len(products) < 2:
+            continue  # Skip if only one product in category
         
-        nodes_processed += 1
-        node_subcategory = node_data.get('subcategory', 'Unknown')
-        node_tags = set(node_data.get('tags', []))
-        
-        # Calculate how many more connections we need
-        connections_needed = min_connections - current_connections
-        
-        # Find potential connections in the same category
-        category_matches = []
-        
-        for other_id, other_data in nodes:
-            if node_id == other_id:
-                continue
-            
-            # Skip if edge already exists
-            if G.has_edge(node_id, other_id):
-                continue
-            
-            other_subcategory = other_data.get('subcategory', 'Unknown')
-            other_tags = set(other_data.get('tags', []))
-            
-            # Check if they share subcategory or tags
-            same_subcategory = (node_subcategory != 'Unknown' and 
-                              node_subcategory == other_subcategory)
-            shared_tags = len(node_tags & other_tags)
-            
-            if same_subcategory or shared_tags > 0:
-                # Calculate weights
+        for i, (node_id, node_data) in enumerate(products):
+            for j, (other_id, other_data) in enumerate(products):
+                if i >= j:  # Skip self and avoid duplicates
+                    continue
+                
+                # Skip if edge already exists
+                if G.has_edge(node_id, other_id):
+                    continue
+                
+                # Calculate weights (ingredients and tags only, NOT subcategory)
                 ing1 = node_data.get('ingredients', [])
                 ing2 = other_data.get('ingredients', [])
                 ing_weight = weight_ingredients(ing1, ing2)
                 
-                # Give extra weight for same subcategory
-                tag_match = float(shared_tags)
-                if same_subcategory:
-                    tag_match += 2.0  # Bonus for same subcategory
+                # Tag similarity (subcategory is NOT in tags anymore)
+                tag_shared = len(set(node_data.get('tags', [])) & set(other_data.get('tags', [])))
+                tag_match = float(tag_shared)
                 
-                user_match = float(shared_tags) * 0.2
+                # User match using co-purchase data
+                user_match = ugw.get_weight(node_id, other_id, normalize=True)
                 
+                # Create Weight - subcategory connection gets a base weight of 2.0
                 weight = Weight(
                     ingredient_match=ing_weight,
                     user_match=user_match,
-                    tag_match=tag_match
+                    tag_match=tag_match + 2.0  # Add 2.0 for being in same subcategory
                 )
                 
-                total_weight = weight.score()
-                
-                # Store with priority (same subcategory gets higher priority)
-                priority = 2 if same_subcategory else 1
-                category_matches.append((other_id, total_weight, priority, weight))
-        
-        # Sort by priority (same subcategory first) and then by weight
-        category_matches.sort(key=lambda x: (x[2], x[1]), reverse=True)
-        
-        # Connect to enough products to reach min_connections
-        connections_to_add = min(connections_needed, len(category_matches))
-        for i in range(connections_to_add):
-            other_id, total_weight, priority, weight = category_matches[i]
-            G.add_edge(node_id, other_id, **weight.to_dict())
-            edges_added += 1
+                # Add edges in both directions
+                G.add_edge(node_id, other_id, **weight.to_dict())
+                G.add_edge(other_id, node_id, **weight.to_dict())
+                edges_added += 2
     
-    print(f"  Processed {nodes_processed} nodes with < {min_connections} connections")
-    print(f"  Added {edges_added} fallback edges based on category matching")
+    print(f"  Added {edges_added} subcategory-based connections across {len(subcategory_groups)} categories")
 
 
 def weight_ingredients(ing1: List[tuple[str, float]], ing2: List[tuple[str, float]]) -> float:

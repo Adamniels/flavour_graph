@@ -9,7 +9,13 @@ from pathlib import Path
 
 
 class Weight:
-    """Weight object describing similarity/affinity between two products."""
+    """Weight object describing similarity/affinity between two products.
+    
+    Weights are balanced to prioritize product similarity:
+    - ingredient_match: Heavily weighted (×1.5 multiplier applied internally)
+    - tag_match: Important for categorization (×1.0 multiplier applied)
+    - user_match: Co-purchase data, moderated (×0.6 multiplier to prevent dominance)
+    """
 
     def __init__(self, ingredient_match: float = 0.0, user_match: float = 0.0, tag_match: float = 0.0):
         self.ingredient_match = float(ingredient_match)
@@ -17,8 +23,14 @@ class Weight:
         self.tag_match = float(tag_match)
 
     def score(self) -> float:
-        """Combined score used for ranking/selection (simple sum)."""
-        return self.ingredient_match + self.user_match + self.tag_match
+        """Combined score with weighted components.
+        
+        Returns:
+            Weighted sum: ingredient×1.5 + user×0.6 + tag×1.0
+        """
+        return (self.ingredient_match * 1.5 +  # Ingredient similarity is most important
+                self.user_match * 0.6 +         # User behavior is informative but not dominant
+                self.tag_match * 1.0)           # Tag/category matching is important
 
     def __repr__(self) -> str:
         return f"Weight(ing={self.ingredient_match:.1f}, user={self.user_match:.1f}, tag={self.tag_match:.1f})"
