@@ -54,3 +54,42 @@ class product_node:
 
     def __repr__(self) -> str:
         return f"product_node(id={self.id!r}, prio={self.prio}, tags={self.tags}, ingredients={self.ingredients})"
+
+
+#indexerbar hjälparklass för ID -> integer, sortering och indexering
+class IndexedPriorityList:
+    """Håller (id, value)-par, kan sorteras och indexeras.
+    
+    Exempel:
+        idx = IndexedPriorityList.from_nodes(G.nodes(data=True), key='prio')
+        idx.sort(reverse=True)
+        top3_ids = idx.top(3)
+        first_item = idx[0]  # (id, value)
+    """
+    def __init__(self, items):
+        # items: list[tuple[id, int]]
+        self._items = list(items)
+
+    @classmethod
+    def from_nodes(cls, nodes_iterable, key: str = 'prio'):
+        items = [(node_id, int(data.get(key, 0))) for node_id, data in nodes_iterable]
+        return cls(items)
+
+    def sort(self, reverse: bool = True):
+        self._items.sort(key=lambda x: x[1], reverse=reverse)
+
+    # to get highest use case, use top(1)
+    def top(self, n: int) -> List[str]:
+        return [node_id for node_id, _ in self._items[:max(0, int(n))]]
+
+    def ids(self) -> List[str]:
+        return [node_id for node_id, _ in self._items]
+    
+    def half_prio(self, node_id: str):
+        for i, (nid, val) in enumerate(self._items):
+            if nid == node_id:
+                self._items[i] = (nid, val // 2)
+                break
+
+    def __getitem__(self, idx):
+        return self._items[idx]
