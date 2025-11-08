@@ -48,7 +48,13 @@ htmlcov/
 *.pdf
 !example*.png
 
+# Data folder (ignore everywhere)
+**/data/
+data/
+
 # MyPy
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+data/
