@@ -128,15 +128,30 @@ def setup_graph(min_edge_weight: float = 5.0) -> nx.DiGraph:
 def read_in_products_information(G: nx.DiGraph):
     """Add product nodes with attributes to the graph.
     
-    Reads product data from data/products.json and extracts:
-    - gpcCategoryCode.name as a string
-    - fullIngredientStatement as a list (parsed from ingredientStatement)
+    Reads product data from data/products.json for ingredients and names,
+    and data/products.parquet for subcategories.
     """
-    # Get the path to the products.json file
+    # Get the path to the data files
     script_dir = os.path.dirname(os.path.abspath(__file__))
     products_file = os.path.join(script_dir, "data", "products.json")
+    products_parquet = os.path.join(script_dir, "data", "products.parquet")
     
-    # Read the JSON file
+    # Read the parquet file for subcategories
+    import pandas as pd
+    df_products = pd.read_parquet(products_parquet)
+    
+    # Create a mapping from EAN to subcategory
+    # Normalize EANs: parquet has float, JSON has string with leading zeros
+    ean_to_subcategory = {}
+    for _, row in df_products.iterrows():
+        if pd.notna(row['ean']):
+            # Convert to int then to string with leading zeros (14 digits)
+            ean_normalized = str(int(row['ean'])).zfill(14)
+            ean_to_subcategory[ean_normalized] = row.get('subcategory', 'Unknown')
+    
+    print(f"Loaded {len(ean_to_subcategory)} subcategories from products.parquet")
+    
+    # Read the JSON file for detailed product info
     with open(products_file, 'r', encoding='utf-8') as f:
         products_data = json.load(f)
     
@@ -153,25 +168,20 @@ def read_in_products_information(G: nx.DiGraph):
             gpc_category_name = product['gpcCategoryCode'].get('name', '')
         
         # Extract fullIngredientStatement as a list of tuples (name, quantity)
-        # First check if fullIngredientStatement exists, otherwise parse ingredientStatement
         full_ingredient_statement = []
         if 'fullIngredientStatement' in product:
-            # If it's already a list of tuples, use it directly
             if isinstance(product['fullIngredientStatement'], list):
                 full_ingredient_statement = product['fullIngredientStatement']
-            # If it's a string, parse it
             elif isinstance(product['fullIngredientStatement'], str):
                 full_ingredient_statement = _parse_ingredients(product['fullIngredientStatement'])
         elif 'ingredientStatement' in product and product['ingredientStatement']:
-            # Parse ingredientStatement string into tuples
             full_ingredient_statement = _parse_ingredients(product['ingredientStatement'])
         
-        # Extract product name (combine brandName and descriptionShort for best results)
+        # Extract product name
         brand_name = product.get('brandName', '')
         description_short = product.get('descriptionShort', '')
         trade_item_desc = product.get('tradeItemDescription', '')
         
-        # Build the product name in order of preference
         if brand_name and description_short:
             product_name = f"{brand_name} {description_short}"
         elif description_short:
@@ -181,18 +191,20 @@ def read_in_products_information(G: nx.DiGraph):
         elif trade_item_desc:
             product_name = trade_item_desc
         else:
-            product_name = product_id  # Fallback to ID if nothing else exists
+            product_name = product_id
         
-        # Add node with attributes
-        # Using the existing structure: prio, tags, ingredients
-        # We'll store gpcCategoryName and fullIngredientStatement as additional attributes
+        # Get subcategory from parquet data
+        subcategory = ean_to_subcategory.get(product_id, 'Unknown')
+        
+        # Add node with attributes including subcategory
         attrs = {
-            'prio': 5,  # Default priority, can be adjusted
+            'prio': 5,
             'tags': [gpc_category_name] if gpc_category_name else [],
             'ingredients': full_ingredient_statement,
             'gpcCategoryName': gpc_category_name,
             'fullIngredientStatement': full_ingredient_statement,
-            'name': product_name
+            'name': product_name,
+            'subcategory': subcategory  # New attribute for coloring
         }
         
         G.add_node(product_id, **attrs)

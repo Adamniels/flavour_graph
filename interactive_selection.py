@@ -9,6 +9,7 @@ import copy
 
 from main import setup_graph, create_priority_list_from_sales
 from models import IndexedPriorityList
+from subcategory_colors import get_subcategory_color, create_subcategory_colormap
 
 
 class InteractiveSelection:
@@ -22,6 +23,10 @@ class InteractiveSelection:
         self.current_selection = None
         self.affected_neighbors = []
         self.iteration = 0
+        
+        # Create subcategory colormap
+        self.subcategory_colors = create_subcategory_colormap(G)
+        print(f"\nCreated colormap for {len(self.subcategory_colors)} subcategories")
         
         # Setup figure
         self.fig = plt.figure(figsize=(20, 10))
@@ -113,8 +118,8 @@ class InteractiveSelection:
         self.fig.canvas.draw()
     
     def draw_graph(self):
-        """Draw the graph."""
-        # Color and size nodes
+        """Draw the graph with subcategory colors."""
+        # Color and size nodes based on subcategory and state
         node_colors = []
         node_sizes = []
         node_borders = []
@@ -125,25 +130,32 @@ class InteractiveSelection:
         
         for node in self.G.nodes():
             size_base = 300
+            subcategory = self.G.nodes[node].get('subcategory', 'Unknown')
+            base_color = get_subcategory_color(subcategory)
             
             if node == self.current_selection:
+                # Currently selected - bright with golden border
                 node_colors.append('#00FF00')
                 node_sizes.append(size_base * 3)
                 node_borders.append('#FFD700')
             elif node in self.selected:
-                node_colors.append('#FF6B00')
+                # Previously selected - use subcategory color with black border
+                node_colors.append(base_color)
                 node_sizes.append(size_base * 1.5)
-                node_borders.append('#8B4513')
+                node_borders.append('#000000')  # Black border
             elif node in affected_ids:
-                node_colors.append('#FFFF00')
+                # Affected by current selection - keep subcategory color, add orange ring
+                node_colors.append(base_color)  # Keep subcategory color!
                 node_sizes.append(size_base * 2)
-                node_borders.append('#FFA500')
+                node_borders.append('#FFA500')  # Orange/yellow outer ring
             else:
+                # Normal nodes - subcategory color with intensity based on priority
                 prio = prio_dict.get(node, 5)
                 intensity = min(prio / 100, 1.0)
-                node_colors.append(plt.cm.Blues(0.3 + intensity * 0.5))
+                # Use subcategory color with alpha based on priority
+                node_colors.append(base_color)
                 node_sizes.append(size_base * (0.5 + intensity * 0.5))
-                node_borders.append('#4682B4')
+                node_borders.append(base_color)
         
         # Draw nodes
         nx.draw_networkx_nodes(self.G, self.pos,
@@ -188,6 +200,25 @@ class InteractiveSelection:
                                       arrowsize=20,
                                       arrowstyle='->',
                                       ax=self.ax_graph)
+                
+                # Draw edge labels showing weights (only for edges above threshold)
+                edge_labels = {}
+                for u, v in current_edges:
+                    weight = self.G[u][v].get('weight', 0)
+                    if weight >= 5.0:  # Only show weights above threshold
+                        edge_labels[(u, v)] = f'{weight:.1f}'
+                
+                if edge_labels:
+                    nx.draw_networkx_edge_labels(self.G, self.pos,
+                                                 edge_labels=edge_labels,
+                                                 font_size=9,
+                                                 font_weight='bold',
+                                                 font_color='white',
+                                                 bbox=dict(boxstyle='round,pad=0.3',
+                                                         facecolor='#FF6B00',
+                                                         edgecolor='none',
+                                                         alpha=0.8),
+                                                 ax=self.ax_graph)
         else:
             nx.draw_networkx_edges(self.G, self.pos,
                                   width=0.3,
@@ -196,7 +227,7 @@ class InteractiveSelection:
                                   arrows=False,
                                   ax=self.ax_graph)
         
-        # Draw labels for important nodes
+        # Draw labels for important nodes with background boxes for readability
         labels_to_draw = {}
         for node in self.G.nodes():
             if node == self.current_selection or node in self.selected or node in affected_ids:
@@ -205,29 +236,53 @@ class InteractiveSelection:
                     name = name[:17] + '...'
                 labels_to_draw[node] = name
         
-        nx.draw_networkx_labels(self.G, self.pos,
-                               labels=labels_to_draw,
-                               font_size=8,
-                               font_weight='bold',
-                               font_color='black',
-                               ax=self.ax_graph)
+        # Draw labels with semi-transparent white background for visibility without blocking node colors
+        for node, label in labels_to_draw.items():
+            x, y = self.pos[node]
+            
+            # Small white box with transparency so node color shows through
+            self.ax_graph.text(x, y, label,
+                             fontsize=7,
+                             fontweight='bold',
+                             color='black',
+                             ha='center',
+                             va='center',
+                             bbox=dict(boxstyle='round,pad=0.2',
+                                     facecolor='white',
+                                     edgecolor='none',
+                                     linewidth=0,
+                                     alpha=0.75))  # More transparent to show node color
         
         # Title
         self.ax_graph.set_title(f'Interactive Product Selection - Step {self.iteration}/{self.num_products}',
                                fontsize=18, fontweight='bold', pad=20)
         
-        # Legend
+        # Legend - show ALL subcategories + state indicators
         legend_elements = [
+            # State indicators
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#00FF00',
-                      markersize=15, label='Just Selected', markeredgecolor='#FFD700', markeredgewidth=2),
-            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#FF6B00',
-                      markersize=12, label='Previously Selected', markeredgecolor='#8B4513', markeredgewidth=2),
+                      markersize=15, label='🌟 Just Selected', markeredgecolor='#FFD700', markeredgewidth=2),
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#FFFF00',
-                      markersize=12, label='Priority Just Decreased', markeredgecolor='#FFA500', markeredgewidth=2),
-            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#6495ED',
-                      markersize=10, label='Other Products (size = priority)', markeredgecolor='#4682B4', markeredgewidth=2),
+                      markersize=12, label='⚡ Priority Decreased', markeredgecolor='#FFA500', markeredgewidth=2),
         ]
-        self.ax_graph.legend(handles=legend_elements, loc='upper left', fontsize=10)
+        
+        # Add ALL subcategories to legend, sorted by count
+        from collections import Counter
+        subcats = [self.G.nodes[n].get('subcategory', 'Unknown') for n in self.G.nodes()]
+        all_subcats = Counter(subcats).most_common()  # Get all, not just top 5
+        
+        for subcat, count in all_subcats:
+            color = get_subcategory_color(subcat)
+            legend_elements.append(
+                plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color,
+                          markersize=10, label=f'{subcat} ({count})', 
+                          markeredgecolor=color, markeredgewidth=2)
+            )
+        
+        # Use 2 columns to fit more categories
+        self.ax_graph.legend(handles=legend_elements, loc='upper left', 
+                            fontsize=8, ncol=2, framealpha=0.95, 
+                            columnspacing=0.5, handletextpad=0.3)
         
         self.ax_graph.axis('off')
     
@@ -254,18 +309,51 @@ class InteractiveSelection:
         # Current selection
         if self.current_selection:
             current_name = self.product_names[self.current_selection]
-            if len(current_name) > 25:
-                current_name = current_name[:22] + '...'
-            
-            ax.add_patch(plt.Rectangle((0.02, y_pos - 0.03), 0.96, 0.06,
-                                      edgecolor='#00FF00', facecolor='#E0FFE0', linewidth=2))
-            
-            ax.text(0.5, y_pos, f'JUST SELECTED:', ha='center',
-                   fontsize=11, fontweight='bold', color='#006600')
-            y_pos -= line_height
-            ax.text(0.5, y_pos, current_name, ha='center',
-                   fontsize=10, fontweight='bold', color='#003300')
-            y_pos -= line_height * 2
+            # Don't truncate - show full name in the box
+            # Split into multiple lines if too long
+            if len(current_name) > 35:
+                # Try to split at space
+                words = current_name.split()
+                line1 = ""
+                line2 = ""
+                for word in words:
+                    if len(line1) + len(word) < 30:
+                        line1 += word + " "
+                    else:
+                        line2 += word + " "
+                line1 = line1.strip()
+                line2 = line2.strip()
+                
+                # Adjust box height for two lines
+                ax.add_patch(plt.Rectangle((0.02, y_pos - 0.04), 0.96, 0.08,
+                                          edgecolor='#00FF00', facecolor='#E0FFE0', linewidth=2))
+                
+                ax.text(0.5, y_pos, f'JUST SELECTED:', ha='center',
+                       fontsize=11, fontweight='bold', color='#006600')
+                y_pos -= line_height
+                ax.text(0.5, y_pos, line1, ha='center',
+                       fontsize=10, fontweight='bold', color='#003300')
+                y_pos -= line_height * 0.9
+                ax.text(0.5, y_pos, line2, ha='center',
+                       fontsize=10, fontweight='bold', color='#003300')
+                y_pos -= line_height * 1.3
+            else:
+                ax.add_patch(plt.Rectangle((0.02, y_pos - 0.03), 0.96, 0.06,
+                                          edgecolor='#00FF00', facecolor='#E0FFE0', linewidth=2))
+                
+                ax.text(0.5, y_pos, f'JUST SELECTED:', ha='center',
+                       fontsize=11, fontweight='bold', color='#006600')
+                y_pos -= line_height
+                ax.text(0.5, y_pos, current_name, ha='center',
+                       fontsize=10, fontweight='bold', color='#003300')
+                y_pos -= line_height
+                
+                # Show subcategory
+                subcategory = self.G.nodes[self.current_selection].get('subcategory', 'Unknown')
+                subcat_color = get_subcategory_color(subcategory)
+                ax.text(0.5, y_pos, f'📦 {subcategory}', ha='center',
+                       fontsize=9, style='italic', color=subcat_color, fontweight='bold')
+                y_pos -= line_height * 1.5
         
         # Affected neighbors
         if self.affected_neighbors:
