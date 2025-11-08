@@ -4,6 +4,8 @@ Weight: Represents similarity/affinity between products
 product_node: Represents a product with attributes (legacy - kept for compatibility)
 """
 from typing import List, Tuple
+import json
+from pathlib import Path
 
 
 class Weight:
@@ -29,6 +31,67 @@ class Weight:
             'tag_match': self.tag_match,
             'weight': self.score()  # total weight for algorithms
         }
+
+class UserGroupWeight:
+    """Reads co-purchase data and calculates user similarity between products."""
+    
+    def __init__(self, json_path: str = None):
+        """Load product relations from JSON file.
+        
+        Args:
+            json_path: Path to product_relations.json (default: ./product_relations.json in workspace)
+        """
+        if json_path is None:
+            # Default to data folder in workspace root
+            json_path = Path(__file__).parent / 'data' / 'product_relations.json'
+        
+        self.relations = {}
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                self.relations = json.load(f)
+            print(f"✅ Loaded {len(self.relations)} products from {json_path}")
+        except FileNotFoundError:
+            print(f"⚠️ Warning: {json_path} not found. UserGroupWeight will return 0.")
+    
+    def get_weight(self, ean_1: str, ean_2: str, normalize: bool = True) -> float:
+        """Calculate user similarity weight between two products.
+        
+        Args:
+            ean_1: First product EAN (with leading 0, e.g. '07310350118342')
+            ean_2: Second product EAN
+            normalize: If True, apply log-scaling to reduce extreme values
+            
+        Returns:
+            Float weight representing how often products are bought together
+        """
+        if ean_1 not in self.relations:
+            return 0.0
+        
+        # Find ean_2 in ean_1's related products
+        for related in self.relations[ean_1].get('related_products', []):
+            if related['product'] == ean_2:
+                count = related['co_purchase_count']
+                
+                if normalize:
+                    # Log-scale to prevent very popular products dominating
+                    import math
+                    return math.log(count + 1)  # +1 to avoid log(0)
+                else:
+                    return float(count)
+        
+        return 0.0
+    
+    def get_top_related(self, ean: str, n: int = 5) -> List[Tuple[str, int]]:
+        """Get top N related products for a given EAN.
+        
+        Returns:
+            List of (ean, co_purchase_count) tuples
+        """
+        if ean not in self.relations:
+            return []
+        
+        related = self.relations[ean].get('related_products', [])
+        return [(p['product'], p['co_purchase_count']) for p in related[:n]]
 
 
 class product_node:
@@ -90,19 +153,11 @@ class IndexedPriorityList:
             if nid == node_id:
                 self._items[i] = (nid, val // 2)
                 break
-
-    # insert or update a product with its sales number as priority
-    def insert_by_sales(self, product_id: str, sales_number: int):
-        # Check if product already exists
-        for i, (nid, val) in enumerate(self._items):
-            if nid == product_id:
-                self._items[i] = (nid, int(sales_number))
-                self.sort(reverse=True)
-                return
-            
-        # Product doesn't exist, insert new entry
-        self._items.append((product_id, int(sales_number)))
-        self.sort(reverse=True)
+    
+    def __len__(self):
+        return len(self._items)
 
     def __getitem__(self, idx):
         return self._items[idx]
+    
+
