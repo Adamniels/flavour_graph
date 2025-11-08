@@ -123,21 +123,40 @@ def setup_graph(min_edge_weight: float = 5.0) -> nx.DiGraph:
     G = nx.DiGraph()
     read_in_products_information(G)
     fill_in_sales_information(G, min_weight_threshold=min_edge_weight)
+    
+    # Always add subcategory-based connections - all products in same category are connected
+    add_subcategory_connections(G)
+    
     return G
 
 
 def read_in_products_information(G: nx.DiGraph):
     """Add product nodes with attributes to the graph.
     
-    Reads product data from data/products.json and extracts:
-    - gpcCategoryCode.name as a string
-    - fullIngredientStatement as a list (parsed from ingredientStatement)
+    Reads product data from data/products.json for ingredients and names,
+    and data/products.parquet for subcategories.
     """
-    # Get the path to the products.json file
+    # Get the path to the data files
     script_dir = os.path.dirname(os.path.abspath(__file__))
     products_file = os.path.join(script_dir, "data", "products.json")
+    products_parquet = os.path.join(script_dir, "data", "products.parquet")
     
-    # Read the JSON file
+    # Read the parquet file for subcategories
+    import pandas as pd
+    df_products = pd.read_parquet(products_parquet)
+    
+    # Create a mapping from EAN to subcategory
+    # Normalize EANs: parquet has float, JSON has string with leading zeros
+    ean_to_subcategory = {}
+    for _, row in df_products.iterrows():
+        if pd.notna(row['ean']):
+            # Convert to int then to string with leading zeros (14 digits)
+            ean_normalized = str(int(row['ean'])).zfill(14)
+            ean_to_subcategory[ean_normalized] = row.get('subcategory', 'Unknown')
+    
+    print(f"Loaded {len(ean_to_subcategory)} subcategories from products.parquet")
+    
+    # Read the JSON file for detailed product info
     with open(products_file, 'r', encoding='utf-8') as f:
         products_data = json.load(f)
     
@@ -154,25 +173,20 @@ def read_in_products_information(G: nx.DiGraph):
             gpc_category_name = product['gpcCategoryCode'].get('name', '')
         
         # Extract fullIngredientStatement as a list of tuples (name, quantity)
-        # First check if fullIngredientStatement exists, otherwise parse ingredientStatement
         full_ingredient_statement = []
         if 'fullIngredientStatement' in product:
-            # If it's already a list of tuples, use it directly
             if isinstance(product['fullIngredientStatement'], list):
                 full_ingredient_statement = product['fullIngredientStatement']
-            # If it's a string, parse it
             elif isinstance(product['fullIngredientStatement'], str):
                 full_ingredient_statement = _parse_ingredients(product['fullIngredientStatement'])
         elif 'ingredientStatement' in product and product['ingredientStatement']:
-            # Parse ingredientStatement string into tuples
             full_ingredient_statement = _parse_ingredients(product['ingredientStatement'])
         
-        # Extract product name (combine brandName and descriptionShort for best results)
+        # Extract product name
         brand_name = product.get('brandName', '')
         description_short = product.get('descriptionShort', '')
         trade_item_desc = product.get('tradeItemDescription', '')
         
-        # Build the product name in order of preference
         if brand_name and description_short:
             product_name = f"{brand_name} {description_short}"
         elif description_short:
@@ -182,18 +196,25 @@ def read_in_products_information(G: nx.DiGraph):
         elif trade_item_desc:
             product_name = trade_item_desc
         else:
-            product_name = product_id  # Fallback to ID if nothing else exists
+            product_name = product_id
         
-        # Add node with attributes
-        # Using the existing structure: prio, tags, ingredients
-        # We'll store gpcCategoryName and fullIngredientStatement as additional attributes
+        # Get subcategory from parquet data
+        subcategory = ean_to_subcategory.get(product_id, 'Unknown')
+        
+        # Build tags list - subcategory is NOT a tag, it's a separate attribute
+        tags = []
+        if gpc_category_name:
+            tags.append(gpc_category_name)
+        
+        # Add node with attributes including subcategory
         attrs = {
-            'prio': 5,  # Default priority, can be adjusted
-            'tags': [gpc_category_name] if gpc_category_name else [],
+            'prio': 5,
+            'tags': tags,
             'ingredients': full_ingredient_statement,
             'gpcCategoryName': gpc_category_name,
             'fullIngredientStatement': full_ingredient_statement,
-            'name': product_name
+            'name': product_name,
+            'subcategory': subcategory  # Separate attribute, not a tag
         }
         
         G.add_node(product_id, **attrs)
@@ -261,12 +282,12 @@ def create_priority_list_from_sales(G: nx.DiGraph, sales_file: str = None) -> In
     return priority_list
 
 
-def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 5.0):
+def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 4.0):
     """Compute and add weighted edges between all product pairs based on similarity.
     
     Args:
         G: The graph to add edges to
-        min_weight_threshold: Minimum total weight required to create an edge (default: 5.0)
+        min_weight_threshold: Minimum total weight required to create an edge (default: 4.0)
                             Lower values = more edges, higher values = more selective
     """
     # Initialize UserGroupWeight for co-purchase data (only once!)
@@ -313,6 +334,73 @@ def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 5.0):
                 edges_skipped += 1
     
     print(f"Added {edges_added} edges (skipped {edges_skipped} weak connections with weight < {min_weight_threshold})")
+
+
+def add_subcategory_connections(G: nx.DiGraph):
+    """Add connections between all products in the same subcategory.
+    
+    This function ensures that products with the same subcategory are always connected,
+    regardless of ingredient or tag similarity. The connection weight is based on
+    ingredients and tags only (subcategory is not counted as a tag).
+    """
+    # Initialize UserGroupWeight for co-purchase data
+    from models import UserGroupWeight
+    ugw = UserGroupWeight()
+    
+    nodes = list(G.nodes(data=True))
+    edges_added = 0
+    
+    print("\nAdding subcategory-based connections...")
+    
+    # Group nodes by subcategory
+    subcategory_groups = {}
+    for node_id, node_data in nodes:
+        subcategory = node_data.get('subcategory', 'Unknown')
+        if subcategory != 'Unknown':
+            if subcategory not in subcategory_groups:
+                subcategory_groups[subcategory] = []
+            subcategory_groups[subcategory].append((node_id, node_data))
+    
+    # For each subcategory group, connect all products to each other
+    for subcategory, products in subcategory_groups.items():
+        if len(products) < 2:
+            continue  # Skip if only one product in category
+        
+        for i, (node_id, node_data) in enumerate(products):
+            for j, (other_id, other_data) in enumerate(products):
+                if i >= j:  # Skip self and avoid duplicates
+                    continue
+                
+                # Skip if edge already exists
+                if G.has_edge(node_id, other_id):
+                    continue
+                
+                # Calculate weights (ingredients and tags only, NOT subcategory)
+                ing1 = node_data.get('ingredients', [])
+                ing2 = other_data.get('ingredients', [])
+                ing_weight = weight_ingredients(ing1, ing2)
+                
+                # Tag similarity (subcategory is NOT in tags anymore)
+                tag_shared = len(set(node_data.get('tags', [])) & set(other_data.get('tags', [])))
+                tag_match = float(tag_shared)
+                
+                # User match using co-purchase data
+                user_match = ugw.get_weight(node_id, other_id, normalize=True)
+                
+                # Create Weight - subcategory connection gets a base weight of 2.0
+                weight = Weight(
+                    ingredient_match=ing_weight,
+                    user_match=user_match,
+                    tag_match=tag_match + 2.0  # Add 2.0 for being in same subcategory
+                )
+                
+                # Add edges in both directions
+                G.add_edge(node_id, other_id, **weight.to_dict())
+                G.add_edge(other_id, node_id, **weight.to_dict())
+                edges_added += 2
+    
+    print(f"  Added {edges_added} subcategory-based connections across {len(subcategory_groups)} categories")
+
 
 def weight_ingredients(ing1: List[tuple[str, float]], ing2: List[tuple[str, float]]) -> float:
     """Calculate advanced ingredient similarity weight between two products.
@@ -395,6 +483,15 @@ def generate(antal: int, G: nx.DiGraph = None, priorityList: IndexedPriorityList
     if priorityList is None:
         raise ValueError("priorityList cannot be None")
     
+    # Calculate max weight in the graph for normalization
+    max_weight = 0.0
+    for u, v, data in G.edges(data=True):
+        weight = data.get('weight', 0.0)
+        if weight > max_weight:
+            max_weight = weight
+    
+    print(f"\nMax weight in graph: {max_weight:.1f}")
+    
     selected = []
 
     for _ in range(antal):
@@ -405,7 +502,11 @@ def generate(antal: int, G: nx.DiGraph = None, priorityList: IndexedPriorityList
         # get all node_ids neighbouring highest prio_id
         neighbors = list(G.neighbors(highest_prio_id))
         for neighbor in neighbors:
-            priorityList.half_prio(neighbor) # half prio of neighbors
+            # Get edge weight and use it to determine penalty
+            edge_data = G.get_edge_data(highest_prio_id, neighbor)
+            if edge_data:
+                weight = edge_data.get('weight', 0.0)
+                priorityList.reduce_prio_by_weight(neighbor, weight, max_weight)
         selected.append(highest_prio_id) # add to selected
         
         # Remove selected product from priority list so it can't be selected again

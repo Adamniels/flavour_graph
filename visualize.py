@@ -2,6 +2,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 from typing import Optional, List
+from subcategory_colors import get_subcategory_color, create_subcategory_colormap
 
 
 def draw_graph(G: nx.DiGraph, 
@@ -24,9 +25,25 @@ def draw_graph(G: nx.DiGraph,
     """
     plt.figure(figsize=figsize)
     
-    # Choose layout
+    # Create weight-based layout where high weights = shorter distances
     if layout == 'spring':
-        pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+        print("Calculating weight-based layout...")
+        
+        # Set spring weights for layout (higher weight = shorter distance)
+        for u, v in G.edges():
+            w = G[u][v].get('weight', 1)
+            G[u][v]['spring_weight'] = w
+        
+        pos = nx.spring_layout(
+            G, 
+            k=2.0,  # Larger k = more spread out (increased from 0.8)
+            iterations=200,  # More iterations for better convergence
+            weight='spring_weight',  # Use edge weights
+            seed=42,
+            scale=10,  # Larger scale to spread nodes much more (increased from 5)
+            threshold=1e-6  # Lower threshold = better convergence
+        )
+        print("✓ Layout calculated with weight-based distances")
     elif layout == 'circular':
         pos = nx.circular_layout(G)
     elif layout == 'kamada_kawai':
@@ -42,24 +59,30 @@ def draw_graph(G: nx.DiGraph,
         if d.get('weight', 0) >= min_edge_weight
     ]
     
-    # Node colors: highlight selected nodes
+    # Node colors: use subcategory colors, highlight selected nodes with border
     node_colors = []
+    node_borders = []
     for node in G.nodes():
+        subcategory = G.nodes[node].get('subcategory', 'Unknown')
+        base_color = get_subcategory_color(subcategory)
+        
         if highlight_nodes and node in highlight_nodes:
-            node_colors.append('#FF6B6B')  # red for highlighted
+            node_colors.append(base_color)
+            node_borders.append('#FF0000')  # Red border for highlighted
         else:
-            node_colors.append('#4ECDC4')  # teal for normal
+            node_colors.append(base_color)
+            node_borders.append(base_color)  # Same color border
     
-    # Node sizes based on priority
-    node_sizes = [G.nodes[node].get('prio', 5) * 100 for node in G.nodes()]
+    # Node sizes based on priority (larger for better visibility)
+    node_sizes = [G.nodes[node].get('prio', 5) * 150 for node in G.nodes()]
     
     # Draw nodes
     nx.draw_networkx_nodes(G, pos, 
                           node_color=node_colors,
                           node_size=node_sizes,
                           alpha=0.9,
-                          edgecolors='black',
-                          linewidths=2)
+                          edgecolors=node_borders,
+                          linewidths=3)
     
     # Draw edges with varying thickness based on weight
     if edges_to_draw:
@@ -86,12 +109,39 @@ def draw_graph(G: nx.DiGraph,
         else:
             labels[node] = name
     
-    # Draw labels
-    nx.draw_networkx_labels(G, pos, 
-                           labels=labels,
-                           font_size=8,
-                           font_weight='bold',
-                           font_family='sans-serif')
+    # Draw labels with semi-transparent background
+    for node, label in labels.items():
+        x, y = pos[node]
+        plt.text(x, y, label,
+                fontsize=7,
+                fontweight='bold',
+                color='black',
+                ha='center',
+                va='center',
+                bbox=dict(boxstyle='round,pad=0.2',
+                        facecolor='white',
+                        edgecolor='none',
+                        alpha=0.75))
+    
+    # Add legend showing ALL subcategories
+    from collections import Counter
+    subcats = [G.nodes[n].get('subcategory', 'Unknown') for n in G.nodes()]
+    all_subcats = Counter(subcats).most_common()  # Show ALL, not just top 10
+    
+    legend_elements = []
+    for subcat, count in all_subcats:
+        color = get_subcategory_color(subcat)
+        legend_elements.append(
+            plt.Line2D([0], [0], marker='o', color='w', 
+                      markerfacecolor=color, markersize=10, 
+                      label=f'{subcat} ({count})',
+                      markeredgecolor=color, markeredgewidth=2)
+        )
+    
+    # Use 2 columns to fit all categories
+    plt.legend(handles=legend_elements, loc='upper left', 
+              fontsize=8, ncol=2, framealpha=0.95,
+              columnspacing=0.5, handletextpad=0.3)
     
     plt.title('Flavour Graph - Product Relationships', fontsize=16, fontweight='bold')
     plt.axis('off')
@@ -136,18 +186,37 @@ def draw_subgraph(G: nx.DiGraph,
     # Draw with edge labels showing weights
     plt.figure(figsize=figsize)
     
-    pos = nx.spring_layout(subgraph, k=3, iterations=50, seed=42)
+    # Weight-based layout for subgraph
+    print("Calculating weight-based layout for subgraph...")
+    for u, v in subgraph.edges():
+        w = subgraph[u][v].get('weight', 1)
+        subgraph[u][v]['spring_weight'] = w
     
-    # Draw nodes - all highlighted since they're all selected
-    node_colors = ['#FF6B6B'] * len(node_ids)
-    node_sizes = [subgraph.nodes[node].get('prio', 5) * 200 for node in subgraph.nodes()]
+    pos = nx.spring_layout(
+        subgraph, 
+        k=2.5,  # More space for readability 
+        iterations=100, 
+        weight='spring_weight',
+        seed=42,
+        scale=2
+    )
+    
+    # Draw nodes with subcategory colors - all highlighted since they're all selected
+    node_colors = []
+    node_borders = []
+    for node in subgraph.nodes():
+        subcategory = subgraph.nodes[node].get('subcategory', 'Unknown')
+        node_colors.append(get_subcategory_color(subcategory))
+        node_borders.append('#FF0000')  # Red border for all selected
+    
+    node_sizes = [subgraph.nodes[node].get('prio', 5) * 300 for node in subgraph.nodes()]
     
     nx.draw_networkx_nodes(subgraph, pos,
                           node_color=node_colors,
                           node_size=node_sizes,
                           alpha=0.9,
-                          edgecolors='black',
-                          linewidths=3)
+                          edgecolors=node_borders,
+                          linewidths=4)
     
     # Draw edges with varying thickness
     if subgraph.number_of_edges() > 0:
@@ -251,10 +320,6 @@ if __name__ == "__main__":
     print("Creating flavour graph...")
     G = setup_graph()
     
-    # Also create a full graph without threshold filtering for subgraph
-    print("Creating full graph for weak connections...")
-    G_full = setup_graph(min_edge_weight=0.0)
-    
     # Print stats
     print_graph_stats(G)
     
@@ -270,15 +335,15 @@ if __name__ == "__main__":
         name = G.nodes[node_id].get('name', node_id)
         print(f"  {i:2d}. {name} (ID: {node_id})")
     
-    # Draw full graph with highlighted selection
+    # Draw full graph with ALL connections that exist in the graph
     print("\nDrawing full graph...")
     draw_graph(G, 
               highlight_nodes=selected,
-              min_edge_weight=5.0,  # Show more connections
+              min_edge_weight=0.0,  # Draw ALL edges that exist in the graph
               layout='spring',
               figsize=(16, 12),
               show=True)
     
-    # Draw subgraph of selected products with ALL connections (including weak ones)
+    # Draw subgraph of selected products with ALL their connections
     print("\nDrawing subgraph of selected products...")
-    draw_subgraph(G, selected, full_graph=G_full, figsize=(10, 6), show=True)
+    draw_subgraph(G, selected, full_graph=G, figsize=(10, 6), show=True)
