@@ -76,9 +76,20 @@ def draw_graph(G: nx.DiGraph,
                               arrowsize=15,
                               arrowstyle='->')
     
+    # Create labels using product names instead of IDs
+    labels = {}
+    for node in G.nodes():
+        name = G.nodes[node].get('name', node)
+        # Truncate long names to keep graph readable
+        if len(name) > 25:
+            labels[node] = name[:22] + '...'
+        else:
+            labels[node] = name
+    
     # Draw labels
     nx.draw_networkx_labels(G, pos, 
-                           font_size=10,
+                           labels=labels,
+                           font_size=8,
                            font_weight='bold',
                            font_family='sans-serif')
     
@@ -145,7 +156,8 @@ def print_graph_stats(G: nx.DiGraph):
                             key=lambda x: x[1].get('prio', 0), 
                             reverse=True)
         for i, (node_id, attrs) in enumerate(sorted_nodes[:5], 1):
-            print(f"  {i}. {node_id}: prio={attrs['prio']}, "
+            name = attrs.get('name', node_id)
+            print(f"  {i}. {name}: prio={attrs['prio']}, "
                   f"in_degree={G.in_degree(node_id)}, "
                   f"out_degree={G.out_degree(node_id)}")
         
@@ -155,7 +167,9 @@ def print_graph_stats(G: nx.DiGraph):
                             key=lambda x: x[2].get('weight', 0),
                             reverse=True)
         for i, (src, dst, attrs) in enumerate(sorted_edges[:5], 1):
-            print(f"  {i}. {src} -> {dst}: weight={attrs['weight']:.2f}")
+            src_name = G.nodes[src].get('name', src)
+            dst_name = G.nodes[dst].get('name', dst)
+            print(f"  {i}. {src_name} -> {dst_name}: weight={attrs['weight']:.2f}")
     
     print("=" * 50)
 
@@ -173,15 +187,18 @@ if __name__ == "__main__":
     # Generate selection
     print("\nGenerating product selection...")
     selected = generate(4, G)
-    print(f"Selected products: {selected}")
+    print(f"Selected products:")
+    for node_id in selected:
+        name = G.nodes[node_id].get('name', node_id)
+        print(f"  - {name} (ID: {node_id})")
     
     # Draw full graph with highlighted selection
     print("\nDrawing full graph...")
     draw_graph(G, 
               highlight_nodes=selected,
-              min_edge_weight=1.0,  # Only show significant connections
+              min_edge_weight=5.0,  # Show more connections
               layout='spring',
-              figsize=(14, 10),
+              figsize=(16, 12),
               show=True)
     
     # Draw subgraph of selected products
