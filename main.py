@@ -14,6 +14,7 @@ Edges represent relationships with weight attributes:
 import networkx as nx
 from typing import List
 from models import Weight
+from models import IndexedPriorityList
 
 
 def setup_graph() -> nx.DiGraph:
@@ -67,7 +68,7 @@ def fill_in_sales_information(G: nx.DiGraph):
             G.add_edge(node_id, other_id, **weight.to_dict())
 
 
-def generate(antal: int, G: nx.DiGraph = None) -> List[str]:
+def generate(antal: int, G: nx.DiGraph = None, priorityList: IndexedPriorityList = None) -> List[str]:
     """Select `antal` products to populate a vending machine.
     
     Current strategy: pick top-N by `prio` attribute.
@@ -83,16 +84,28 @@ def generate(antal: int, G: nx.DiGraph = None) -> List[str]:
     if G is None:
         G = setup_graph()
     
-    # Sort nodes by priority (descending)
-    sorted_nodes = sorted(
-        G.nodes(data=True),
-        key=lambda x: x[1].get('prio', 0),
-        reverse=True
-    )
+    if priorityList is None:
+        #throw error 
+        return ValueError("priorityList cannot be None")
     
-    # Select top antal
-    selected = [node_id for node_id, _ in sorted_nodes[:max(0, int(antal))]]
-    return selected
+    selected = []
+
+    for _ in antal:
+        #sort 
+        priorityList.sort(reverse=True)
+        # pick top
+        highest_prio_id = priorityList.ids()[0]
+        # get all node_ids neighbouring highest prio_id
+        neighbors = list(G.neighbors(highest_prio_id))
+        for neighbor in neighbors:
+            priorityList.half_prio(neighbor) # half prio of neighbors
+        selected.append(highest_prio_id) # add to selected
+
+    # Sort nodes by priority (descending)
+    priorityList.sort(reverse=True)
+
+    return selected # en lista med nycklar till grafnoderna
+
 
 
 if __name__ == "__main__":
