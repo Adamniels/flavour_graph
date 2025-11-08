@@ -483,6 +483,15 @@ def generate(antal: int, G: nx.DiGraph = None, priorityList: IndexedPriorityList
     if priorityList is None:
         raise ValueError("priorityList cannot be None")
     
+    # Calculate max weight in the graph for normalization
+    max_weight = 0.0
+    for u, v, data in G.edges(data=True):
+        weight = data.get('weight', 0.0)
+        if weight > max_weight:
+            max_weight = weight
+    
+    print(f"\nMax weight in graph: {max_weight:.1f}")
+    
     selected = []
 
     for _ in range(antal):
@@ -493,7 +502,11 @@ def generate(antal: int, G: nx.DiGraph = None, priorityList: IndexedPriorityList
         # get all node_ids neighbouring highest prio_id
         neighbors = list(G.neighbors(highest_prio_id))
         for neighbor in neighbors:
-            priorityList.half_prio(neighbor) # half prio of neighbors
+            # Get edge weight and use it to determine penalty
+            edge_data = G.get_edge_data(highest_prio_id, neighbor)
+            if edge_data:
+                weight = edge_data.get('weight', 0.0)
+                priorityList.reduce_prio_by_weight(neighbor, weight, max_weight)
         selected.append(highest_prio_id) # add to selected
         
         # Remove selected product from priority list so it can't be selected again

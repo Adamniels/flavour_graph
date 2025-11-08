@@ -22,6 +22,13 @@ def generate_with_animation(antal: int, G: nx.DiGraph, priorityList: IndexedPrio
     if priorityList is None:
         raise ValueError("priorityList cannot be None")
     
+    # Calculate max weight for normalization
+    max_weight = 0.0
+    for u, v, data in G.edges(data=True):
+        weight = data.get('weight', 0.0)
+        if weight > max_weight:
+            max_weight = weight
+    
     selected = []
     
     for _ in range(antal):
@@ -38,10 +45,14 @@ def generate_with_animation(antal: int, G: nx.DiGraph, priorityList: IndexedPrio
         # Create dict for fast lookup
         prio_dict = {nid: val for nid, val in priorityList._items}
         
-        # Half priority of neighbors and track changes
+        # Reduce priority of neighbors based on edge weight and track changes
         for neighbor in neighbors:
             old_prio = prio_dict.get(neighbor, 0)
-            priorityList.half_prio(neighbor)
+            # Get edge weight
+            edge_data = G.get_edge_data(highest_prio_id, neighbor)
+            if edge_data:
+                weight = edge_data.get('weight', 0.0)
+                priorityList.reduce_prio_by_weight(neighbor, weight, max_weight)
             new_prio = next((val for nid, val in priorityList._items if nid == neighbor), 0)
             if old_prio != new_prio:
                 affected_neighbors.append((neighbor, old_prio, new_prio))

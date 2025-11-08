@@ -161,9 +161,29 @@ class IndexedPriorityList:
         return [node_id for node_id, _ in self._items]
     
     def half_prio(self, node_id: str):
+        """Deprecated: Use reduce_prio_by_weight instead."""
         for i, (nid, val) in enumerate(self._items):
             if nid == node_id:
                 self._items[i] = (nid, val // 2)
+                break
+    
+    def reduce_prio_by_weight(self, node_id: str, edge_weight: float, max_weight: float):
+        """Reduce priority based on edge weight.
+        
+        Higher weight = stronger connection = more penalty.
+        Uses percentage reduction: prio *= (1 - weight/max_weight)
+        
+        Args:
+            node_id: Product to reduce priority for
+            edge_weight: Weight of the edge
+            max_weight: Maximum weight in the graph (for normalization)
+        """
+        for i, (nid, val) in enumerate(self._items):
+            if nid == node_id:
+                # Scale weight to percentage (0-1 range), cap at 65% reduction
+                reduction_factor = min(edge_weight / max_weight, 0.65)
+                new_val = int(val * (1 - reduction_factor))
+                self._items[i] = (nid, max(1, new_val))  # Keep at least priority 1
                 break
     
     def __len__(self):

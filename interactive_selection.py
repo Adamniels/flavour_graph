@@ -24,6 +24,14 @@ class InteractiveSelection:
         self.affected_neighbors = []
         self.iteration = 0
         
+        # Calculate max weight for normalization
+        self.max_weight = 0.0
+        for u, v, data in G.edges(data=True):
+            weight = data.get('weight', 0.0)
+            if weight > self.max_weight:
+                self.max_weight = weight
+        print(f"\nMax weight in graph: {self.max_weight:.1f}")
+        
         # Create subcategory colormap
         self.subcategory_colors = create_subcategory_colormap(G)
         print(f"\nCreated colormap for {len(self.subcategory_colors)} subcategories")
@@ -101,7 +109,11 @@ class InteractiveSelection:
         
         for neighbor in neighbors:
             old_prio = prio_dict.get(neighbor, 0)
-            self.priority_list.half_prio(neighbor)
+            # Get edge weight and use it for priority reduction
+            edge_data = self.G.get_edge_data(highest_prio_id, neighbor)
+            if edge_data:
+                weight = edge_data.get('weight', 0.0)
+                self.priority_list.reduce_prio_by_weight(neighbor, weight, self.max_weight)
             # Get new priority after change
             new_prio = next((val for nid, val in self.priority_list._items if nid == neighbor), 0)
             if old_prio != new_prio:
