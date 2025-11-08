@@ -107,29 +107,99 @@ def draw_graph(G: nx.DiGraph,
 
 def draw_subgraph(G: nx.DiGraph,
                   node_ids: List[str],
+                  full_graph: Optional[nx.DiGraph] = None,
                   figsize: tuple = (10, 6),
                   show: bool = True,
                   save_path: Optional[str] = None):
     """Draw a subgraph containing only specified nodes and their connections.
     
     Args:
-        G: NetworkX directed graph
+        G: NetworkX directed graph (filtered by threshold)
         node_ids: List of node IDs to include in subgraph
+        full_graph: Full unfiltered graph to check for weak connections
         figsize: Figure size (width, height) in inches
         show: Whether to display the plot
         save_path: If provided, save the figure to this path
     """
     # Create subgraph
-    subgraph = G.subgraph(node_ids)
+    subgraph = G.subgraph(node_ids).copy()
     
-    # Draw using the main function
-    draw_graph(subgraph,
-              highlight_nodes=node_ids,
-              min_edge_weight=0.0,
-              layout='spring',
-              figsize=figsize,
-              show=show,
-              save_path=save_path)
+    # If we have the full graph, add weak connections that might be below threshold
+    if full_graph:
+        for u in node_ids:
+            for v in node_ids:
+                if u != v and full_graph.has_edge(u, v):
+                    # Add edge if it doesn't exist in filtered graph
+                    if not subgraph.has_edge(u, v):
+                        subgraph.add_edge(u, v, **full_graph[u][v])
+    
+    # Draw with edge labels showing weights
+    plt.figure(figsize=figsize)
+    
+    pos = nx.spring_layout(subgraph, k=3, iterations=50, seed=42)
+    
+    # Draw nodes - all highlighted since they're all selected
+    node_colors = ['#FF6B6B'] * len(node_ids)
+    node_sizes = [subgraph.nodes[node].get('prio', 5) * 200 for node in subgraph.nodes()]
+    
+    nx.draw_networkx_nodes(subgraph, pos,
+                          node_color=node_colors,
+                          node_size=node_sizes,
+                          alpha=0.9,
+                          edgecolors='black',
+                          linewidths=3)
+    
+    # Draw edges with varying thickness
+    if subgraph.number_of_edges() > 0:
+        edge_weights = [subgraph[u][v].get('weight', 0) for u, v in subgraph.edges()]
+        max_weight = max(edge_weights) if edge_weights else 1
+        edge_widths = [max(w / max_weight * 4, 0.5) for w in edge_weights]
+        
+        nx.draw_networkx_edges(subgraph, pos,
+                              width=edge_widths,
+                              alpha=0.6,
+                              edge_color='gray',
+                              arrows=True,
+                              arrowsize=20,
+                              arrowstyle='->')
+        
+        # Draw edge labels showing weights
+        edge_labels = {(u, v): f"{d['weight']:.1f}" 
+                      for u, v, d in subgraph.edges(data=True)}
+        nx.draw_networkx_edge_labels(subgraph, pos,
+                                     edge_labels=edge_labels,
+                                     font_size=10,
+                                     font_weight='bold',
+                                     bbox=dict(boxstyle='round,pad=0.3', 
+                                             facecolor='yellow', 
+                                             alpha=0.7))
+    
+    # Create labels using product names
+    labels = {}
+    for node in subgraph.nodes():
+        name = subgraph.nodes[node].get('name', node)
+        # Keep full names in subgraph since there are fewer nodes
+        if len(name) > 35:
+            labels[node] = name[:32] + '...'
+        else:
+            labels[node] = name
+    
+    nx.draw_networkx_labels(subgraph, pos,
+                           labels=labels,
+                           font_size=10,
+                           font_weight='bold',
+                           font_family='sans-serif')
+    
+    plt.title('Selected Products - Connection Strengths', fontsize=14, fontweight='bold')
+    plt.axis('off')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Saved subgraph to {save_path}")
+    
+    if show:
+        plt.show()
 
 
 def print_graph_stats(G: nx.DiGraph):
@@ -181,6 +251,10 @@ if __name__ == "__main__":
     print("Creating flavour graph...")
     G = setup_graph()
     
+    # Also create a full graph without threshold filtering for subgraph
+    print("Creating full graph for weak connections...")
+    G_full = setup_graph(min_edge_weight=0.0)
+    
     # Print stats
     print_graph_stats(G)
     
@@ -205,6 +279,6 @@ if __name__ == "__main__":
               figsize=(16, 12),
               show=True)
     
-    # Draw subgraph of selected products
+    # Draw subgraph of selected products with ALL connections (including weak ones)
     print("\nDrawing subgraph of selected products...")
-    draw_subgraph(G, selected, figsize=(10, 6), show=True)
+    draw_subgraph(G, selected, full_graph=G_full, figsize=(10, 6), show=True)
