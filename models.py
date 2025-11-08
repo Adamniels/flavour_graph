@@ -157,6 +157,23 @@ class IndexedPriorityList:
     def __len__(self):
         return len(self._items)
 
+    def remove(self, node_id: str):
+        """Remove a product from the priority list."""
+        self._items = [(nid, val) for nid, val in self._items if nid != node_id]
+
+    # insert or update a product with its sales number as priority
+    def insert_by_sales(self, product_id: str, sales_number: int):
+        # Check if product already exists
+        for i, (nid, val) in enumerate(self._items):
+            if nid == product_id:
+                self._items[i] = (nid, int(sales_number))
+                self.sort(reverse=True)
+                return
+            
+        # Product doesn't exist, insert new entry
+        self._items.append((product_id, int(sales_number)))
+        self.sort(reverse=True)
+
     def __getitem__(self, idx):
         return self._items[idx]
     
