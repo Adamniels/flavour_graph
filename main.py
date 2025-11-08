@@ -495,14 +495,14 @@ if __name__ == "__main__":
     print(f"\n" + "=" * 60)
     print("TESTING GENERATE FUNCTION WITH SALES-BASED PRIORITY")
     print("=" * 60)
-    print(f"\nGenerating selection of top 4 products by sales:")
+    print(f"\nGenerating selection of top 40 products by sales:")
     
     # Save sales data before generate() modifies the priority_list
     sales_dict = {node_id: sales for node_id, sales in priority_list._items}
     
-    selected = generate(4, G, priorityList=priority_list)
+    selected = generate(40, G, priorityList=priority_list)
     
     for i, product_id in enumerate(selected, 1):
         name = G.nodes[product_id].get('name', product_id)
         sales = sales_dict.get(product_id, 0)
-        print(f"  {i}. {name[:60]:60s} - {sales:,} sales")
+        print(f"  {i:2d}. {name[:60]:60s} - {sales:,} sales")

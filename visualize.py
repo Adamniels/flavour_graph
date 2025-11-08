@@ -264,11 +264,11 @@ if __name__ == "__main__":
     
     # Generate selection
     print("\nGenerating product selection...")
-    selected = generate(4, G, priorityList=priority_list)
-    print(f"Selected products:")
-    for node_id in selected:
+    selected = generate(40, G, priorityList=priority_list)
+    print(f"Selected products ({len(selected)} total):")
+    for i, node_id in enumerate(selected, 1):
         name = G.nodes[node_id].get('name', node_id)
-        print(f"  - {name} (ID: {node_id})")
+        print(f"  {i:2d}. {name} (ID: {node_id})")
     
     # Draw full graph with highlighted selection
     print("\nDrawing full graph...")
