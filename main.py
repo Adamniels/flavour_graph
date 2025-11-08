@@ -122,6 +122,10 @@ def setup_graph(min_edge_weight: float = 5.0) -> nx.DiGraph:
     G = nx.DiGraph()
     read_in_products_information(G)
     fill_in_sales_information(G, min_weight_threshold=min_edge_weight)
+    
+    # Add fallback edges for isolated nodes based on category matching
+    add_fallback_edges_by_category(G)
+    
     return G
 
 
@@ -196,15 +200,22 @@ def read_in_products_information(G: nx.DiGraph):
         # Get subcategory from parquet data
         subcategory = ean_to_subcategory.get(product_id, 'Unknown')
         
+        # Build tags list including both GPC category and subcategory
+        tags = []
+        if gpc_category_name:
+            tags.append(gpc_category_name)
+        if subcategory and subcategory != 'Unknown':
+            tags.append(subcategory)  # Add subcategory to tags for matching
+        
         # Add node with attributes including subcategory
         attrs = {
             'prio': 5,
-            'tags': [gpc_category_name] if gpc_category_name else [],
+            'tags': tags,
             'ingredients': full_ingredient_statement,
             'gpcCategoryName': gpc_category_name,
             'fullIngredientStatement': full_ingredient_statement,
             'name': product_name,
-            'subcategory': subcategory  # New attribute for coloring
+            'subcategory': subcategory  # Keep for coloring
         }
         
         G.add_node(product_id, **attrs)
@@ -319,6 +330,98 @@ def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 5.0):
                 edges_skipped += 1
     
     print(f"Added {edges_added} edges (skipped {edges_skipped} weak connections with weight < {min_weight_threshold})")
+
+
+def add_fallback_edges_by_category(G: nx.DiGraph, min_connections: int = 5):
+    """Add edges for nodes with few connections by connecting them with products in the same category.
+    
+    This ensures products in the same subcategory (e.g., different chips) 
+    get connected even if they don't share ingredients.
+    Strategy:
+    1. Find all nodes with fewer than min_connections outgoing edges
+    2. For each such node, find other products with the same subcategory or tags
+    3. Create connections to reach at least min_connections products in the same category
+    
+    Args:
+        G: NetworkX directed graph
+        min_connections: Minimum number of connections a node should have (default: 5)
+    """
+    nodes = list(G.nodes(data=True))
+    edges_added = 0
+    nodes_processed = 0
+    
+    print(f"\nAdding fallback edges for nodes with < {min_connections} connections based on category...")
+    
+    for node_id, node_data in nodes:
+        # Only process nodes with fewer than min_connections outgoing edges
+        current_connections = G.out_degree(node_id)
+        if current_connections >= min_connections:
+            continue
+        
+        nodes_processed += 1
+        node_subcategory = node_data.get('subcategory', 'Unknown')
+        node_tags = set(node_data.get('tags', []))
+        
+        # Calculate how many more connections we need
+        connections_needed = min_connections - current_connections
+        
+        # Find potential connections in the same category
+        category_matches = []
+        
+        for other_id, other_data in nodes:
+            if node_id == other_id:
+                continue
+            
+            # Skip if edge already exists
+            if G.has_edge(node_id, other_id):
+                continue
+            
+            other_subcategory = other_data.get('subcategory', 'Unknown')
+            other_tags = set(other_data.get('tags', []))
+            
+            # Check if they share subcategory or tags
+            same_subcategory = (node_subcategory != 'Unknown' and 
+                              node_subcategory == other_subcategory)
+            shared_tags = len(node_tags & other_tags)
+            
+            if same_subcategory or shared_tags > 0:
+                # Calculate weights
+                ing1 = node_data.get('ingredients', [])
+                ing2 = other_data.get('ingredients', [])
+                ing_weight = weight_ingredients(ing1, ing2)
+                
+                # Give extra weight for same subcategory
+                tag_match = float(shared_tags)
+                if same_subcategory:
+                    tag_match += 2.0  # Bonus for same subcategory
+                
+                user_match = float(shared_tags) * 0.2
+                
+                weight = Weight(
+                    ingredient_match=ing_weight,
+                    user_match=user_match,
+                    tag_match=tag_match
+                )
+                
+                total_weight = weight.score()
+                
+                # Store with priority (same subcategory gets higher priority)
+                priority = 2 if same_subcategory else 1
+                category_matches.append((other_id, total_weight, priority, weight))
+        
+        # Sort by priority (same subcategory first) and then by weight
+        category_matches.sort(key=lambda x: (x[2], x[1]), reverse=True)
+        
+        # Connect to enough products to reach min_connections
+        connections_to_add = min(connections_needed, len(category_matches))
+        for i in range(connections_to_add):
+            other_id, total_weight, priority, weight = category_matches[i]
+            G.add_edge(node_id, other_id, **weight.to_dict())
+            edges_added += 1
+    
+    print(f"  Processed {nodes_processed} nodes with < {min_connections} connections")
+    print(f"  Added {edges_added} fallback edges based on category matching")
+
 
 def weight_ingredients(ing1: List[tuple[str, float]], ing2: List[tuple[str, float]]) -> float:
     """Calculate advanced ingredient similarity weight between two products.

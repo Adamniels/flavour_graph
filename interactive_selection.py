@@ -28,14 +28,40 @@ class InteractiveSelection:
         self.subcategory_colors = create_subcategory_colormap(G)
         print(f"\nCreated colormap for {len(self.subcategory_colors)} subcategories")
         
-        # Setup figure
-        self.fig = plt.figure(figsize=(20, 10))
-        gs = self.fig.add_gridspec(1, 2, width_ratios=[3, 1], wspace=0.3, bottom=0.1)
+        # Setup larger figure for better visibility
+        self.fig = plt.figure(figsize=(24, 14))
+        gs = self.fig.add_gridspec(1, 2, width_ratios=[3, 1], wspace=0.2, bottom=0.08)
         self.ax_graph = self.fig.add_subplot(gs[0])
         self.ax_stats = self.fig.add_subplot(gs[1])
         
-        # Create fixed layout
-        self.pos = nx.spring_layout(G, k=2, iterations=50, seed=42, scale=2)
+        # Create weight-based layout where high weights = shorter distances
+        # Convert edge weights to spring constants (higher weight = stronger spring = shorter distance)
+        print("\nCalculating weight-based layout...")
+        
+        # Create a dictionary of edge weights for the layout algorithm
+        # In spring layout, 'weight' determines the strength of the spring
+        # We want high edge weights to result in short distances
+        max_weight = max([G[u][v].get('weight', 1) for u, v in G.edges()])
+        
+        # Normalize weights: higher weight = nodes should be closer
+        # We'll use weight directly as the spring constant
+        for u, v in G.edges():
+            w = G[u][v].get('weight', 1)
+            # Higher weight = stronger spring = shorter distance
+            G[u][v]['spring_weight'] = w
+        
+        # Use spring layout with weights
+        # k controls optimal distance, iterations for convergence
+        self.pos = nx.spring_layout(
+            G, 
+            k=0.8,  # Smaller k = more spread out (reduced from 1.5)
+            iterations=150,  # More iterations for better convergence
+            weight='spring_weight',  # Use our calculated weights
+            seed=42,
+            scale=5,  # Larger scale to spread nodes more
+            threshold=1e-5  # Lower threshold = better convergence
+        )
+        print("✓ Layout calculated with weight-based distances")
         
         # Product names
         self.product_names = {node: G.nodes[node].get('name', node) for node in G.nodes()}
@@ -129,7 +155,7 @@ class InteractiveSelection:
         prio_dict = {nid: val for nid, val in self.priority_list._items}
         
         for node in self.G.nodes():
-            size_base = 300
+            size_base = 500  # Increased from 300 for better visibility
             subcategory = self.G.nodes[node].get('subcategory', 'Unknown')
             base_color = get_subcategory_color(subcategory)
             
@@ -141,12 +167,12 @@ class InteractiveSelection:
             elif node in self.selected:
                 # Previously selected - use subcategory color with black border
                 node_colors.append(base_color)
-                node_sizes.append(size_base * 1.5)
+                node_sizes.append(size_base * 1.8)  # Slightly larger
                 node_borders.append('#000000')  # Black border
             elif node in affected_ids:
                 # Affected by current selection - keep subcategory color, add orange ring
                 node_colors.append(base_color)  # Keep subcategory color!
-                node_sizes.append(size_base * 2)
+                node_sizes.append(size_base * 2.2)  # Larger for visibility
                 node_borders.append('#FFA500')  # Orange/yellow outer ring
             else:
                 # Normal nodes - subcategory color with intensity based on priority
