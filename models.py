@@ -90,6 +90,10 @@ class IndexedPriorityList:
             if nid == node_id:
                 self._items[i] = (nid, val // 2)
                 break
+    
+    def remove(self, node_id: str):
+        """Remove a product from the priority list."""
+        self._items = [(nid, val) for nid, val in self._items if nid != node_id]
 
     # insert or update a product with its sales number as priority
     def insert_by_sales(self, product_id: str, sales_number: int):

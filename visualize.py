@@ -176,7 +176,7 @@ def print_graph_stats(G: nx.DiGraph):
 
 if __name__ == "__main__":
     # Demo: visualize the graph
-    from main import setup_graph, generate
+    from main import setup_graph, generate, create_priority_list_from_sales
     
     print("Creating flavour graph...")
     G = setup_graph()
@@ -184,9 +184,13 @@ if __name__ == "__main__":
     # Print stats
     print_graph_stats(G)
     
+    # Create priority list from sales data
+    print("\nCreating priority list from sales data...")
+    priority_list = create_priority_list_from_sales(G)
+    
     # Generate selection
     print("\nGenerating product selection...")
-    selected = generate(4, G)
+    selected = generate(4, G, priorityList=priority_list)
     print(f"Selected products:")
     for node_id in selected:
         name = G.nodes[node_id].get('name', node_id)

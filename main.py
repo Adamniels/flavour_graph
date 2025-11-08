@@ -18,6 +18,7 @@ from typing import List, Tuple
 from models import Weight
 from models import IndexedPriorityList
 import re
+import pandas as pd
 
 
 def _parse_ingredients(ingredient_statement: str) -> List[Tuple[str, float]]:
@@ -197,6 +198,68 @@ def read_in_products_information(G: nx.DiGraph):
         G.add_node(product_id, **attrs)
 
 
+def create_priority_list_from_sales(G: nx.DiGraph, sales_file: str = None) -> IndexedPriorityList:
+    """Create an IndexedPriorityList from sales data.
+    
+    Reads sales data from parquet file and counts sales per product (by EAN/GTIN).
+    Products with more sales get higher priority.
+    
+    Args:
+        G: NetworkX graph containing product nodes
+        sales_file: Path to sales parquet file (default: data/Sales_2025.parquet)
+        
+    Returns:
+        IndexedPriorityList with products ranked by sales count
+    """
+    if sales_file is None:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        sales_file = os.path.join(script_dir, "data", "Sales_2025.parquet")
+    
+    print(f"Reading sales data from {sales_file}...")
+    df = pd.read_parquet(sales_file)
+    
+    # Count sales per EAN
+    sales_by_ean = df.groupby('ean').size().to_dict()
+    print(f"Loaded {len(df)} sales records for {len(sales_by_ean)} unique products")
+    
+    # Create priority list
+    # Match EAN from sales with GTIN in graph nodes
+    priority_items = []
+    matched_products = 0
+    
+    for node_id, node_data in G.nodes(data=True):
+        # Extract GTIN from node_id (format: "GTIN-ProviderGLN")
+        gtin = node_id.split('-')[0] if '-' in node_id else node_id
+        
+        # Convert GTIN to integer for matching (remove leading zeros)
+        try:
+            gtin_int = int(gtin)
+            sales_count = sales_by_ean.get(gtin_int, 0)
+            
+            if sales_count > 0:
+                matched_products += 1
+            
+            priority_items.append((node_id, sales_count))
+        except ValueError:
+            # If GTIN can't be converted to int, use default priority of 0
+            priority_items.append((node_id, 0))
+    
+    print(f"Matched {matched_products} products with sales data out of {G.number_of_nodes()} products in graph")
+    
+    # Create IndexedPriorityList and sort by sales
+    priority_list = IndexedPriorityList(priority_items)
+    priority_list.sort(reverse=True)
+    
+    # Show top 10 products by sales
+    print("\nTop 10 products by sales:")
+    for i, node_id in enumerate(priority_list.top(10), 1):
+        sales = dict(priority_items).get(node_id, 0)
+        name = G.nodes[node_id].get('name', node_id)
+        print(f"  {i}. {name[:50]:50s} - {sales:,} sales")
+    
+    return priority_list
+
+
 def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 5.0):
     """Compute and add weighted edges between all product pairs based on similarity.
     
@@ -315,6 +378,7 @@ def generate(antal: int, G: nx.DiGraph = None, priorityList: IndexedPriorityList
     Args:
         antal: Number of products to select
         G: NetworkX graph (if None, creates a new one)
+        priorityList: IndexedPriorityList (required)
         
     Returns:
         List of product IDs selected
@@ -323,13 +387,12 @@ def generate(antal: int, G: nx.DiGraph = None, priorityList: IndexedPriorityList
         G = setup_graph()
     
     if priorityList is None:
-        #throw error 
-        return ValueError("priorityList cannot be None")
+        raise ValueError("priorityList cannot be None")
     
     selected = []
 
-    for _ in antal:
-        #sort 
+    for _ in range(antal):
+        # sort 
         priorityList.sort(reverse=True)
         # pick top
         highest_prio_id = priorityList.ids()[0]
@@ -338,9 +401,9 @@ def generate(antal: int, G: nx.DiGraph = None, priorityList: IndexedPriorityList
         for neighbor in neighbors:
             priorityList.half_prio(neighbor) # half prio of neighbors
         selected.append(highest_prio_id) # add to selected
-
-    # Sort nodes by priority (descending)
-    priorityList.sort(reverse=True)
+        
+        # Remove selected product from priority list so it can't be selected again
+        priorityList.remove(highest_prio_id)
 
     return selected # en lista med nycklar till grafnoderna
 
@@ -423,9 +486,23 @@ if __name__ == "__main__":
             print(f"    weight={attrs['weight']:.1f} (ingredient={attrs['ingredient_match']:.1f}, tag={attrs['tag_match']:.0f}, user={attrs['user_match']:.1f})")
             count += 1
     
-    print(f"\nGenerated selection (top 4 by prio):")
-    selected = generate(4, G)
-    for product_id in selected:
+    # Create priority list from sales data
+    print("\n" + "=" * 60)
+    print("CREATING PRIORITY LIST FROM SALES DATA")
+    print("=" * 60)
+    priority_list = create_priority_list_from_sales(G)
+    
+    print(f"\n" + "=" * 60)
+    print("TESTING GENERATE FUNCTION WITH SALES-BASED PRIORITY")
+    print("=" * 60)
+    print(f"\nGenerating selection of top 4 products by sales:")
+    
+    # Save sales data before generate() modifies the priority_list
+    sales_dict = {node_id: sales for node_id, sales in priority_list._items}
+    
+    selected = generate(4, G, priorityList=priority_list)
+    
+    for i, product_id in enumerate(selected, 1):
         name = G.nodes[product_id].get('name', product_id)
-        prio = G.nodes[product_id]['prio']
-        print(f"  - {name} (prio={prio})")
+        sales = sales_dict.get(product_id, 0)
+        print(f"  {i}. {name[:60]:60s} - {sales:,} sales")
