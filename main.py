@@ -11,9 +11,104 @@ Edges represent relationships with weight attributes:
  - tag_match: overlap in tags
  - weight: combined score
 """
+import json
+import os
 import networkx as nx
-from typing import List
+from typing import List, Tuple
 from models import Weight
+import re
+
+
+def _parse_ingredients(ingredient_statement: str) -> List[Tuple[str, float]]:
+    """Parse ingredient statement into a list of tuples (name: str, quantity: float).
+    
+    Extracts ingredient names and quantities (including percentages) from the statement.
+    If no quantity is found, defaults to 0.0.
+    
+    Args:
+        ingredient_statement: Raw ingredient statement string
+        
+    Returns:
+        List of tuples (ingredient_name, quantity) where quantity is a float
+    """
+    # Remove common prefixes like "Ingredienser:" or "Ingredients:"
+    if ':' in ingredient_statement:
+        ingredient_statement = ingredient_statement.split(':', 1)[1]
+    
+    # Split by commas, but be careful not to split on commas inside parentheses
+    # We'll use a regex to split on commas that are not inside parentheses
+    ingredients = []
+    
+    # Find all commas that are not inside parentheses
+    # This is a simplified approach: split by comma, but check if we're inside parentheses
+    parts = []
+    current = ""
+    paren_depth = 0
+    
+    for char in ingredient_statement:
+        if char == '(':
+            paren_depth += 1
+            current += char
+        elif char == ')':
+            paren_depth -= 1
+            current += char
+        elif char == ',' and paren_depth == 0:
+            # This comma is a separator, not inside parentheses
+            parts.append(current.strip())
+            current = ""
+        else:
+            current += char
+    
+    # Add the last part
+    if current.strip():
+        parts.append(current.strip())
+    
+    # Process each ingredient part
+    for ing in parts:
+        if not ing:
+            continue
+        
+        # Try to extract quantity from parentheses
+        # Pattern: ingredient (quantity) or ingredient (percentage%)
+        # Examples: "kokosflingor (4,6%)", "taurin (0,4 %)", "russin (13%)"
+        quantity = 0.0
+        name = ing
+        
+        # Look for parentheses with numbers/percentages
+        paren_match = re.search(r'\(([^)]+)\)', ing)
+        if paren_match:
+            content = paren_match.group(1).strip()
+            
+            # Check if it's a percentage or quantity
+            # Pattern: number with optional comma as decimal separator, optional %
+            # Examples: "4,6%", "0,4 %", "13%", "4.6%"
+            # Match numbers with comma or dot as decimal separator
+            qty_match = re.search(r'(\d+[,.]?\d*)\s*%?', content)
+            if qty_match:
+                qty_str = qty_match.group(1)
+                # Replace comma with dot for float conversion
+                qty_str = qty_str.replace(',', '.')
+                try:
+                    quantity = float(qty_str)
+                except ValueError:
+                    quantity = 0.0
+                
+                # Remove the parentheses content from the name
+                name = re.sub(r'\s*\([^)]+\)', '', ing).strip()
+            else:
+                # Parentheses contain non-quantity info, keep it in the name
+                name = ing
+        else:
+            # No parentheses, just the ingredient name
+            name = ing
+        
+        # Clean up the name (remove extra whitespace)
+        name = ' '.join(name.split())
+        
+        if name:  # Only add if we have a name
+            ingredients.append((name, quantity))
+    
+    return ingredients
 
 
 def setup_graph() -> nx.DiGraph:
@@ -27,18 +122,55 @@ def setup_graph() -> nx.DiGraph:
 def read_in_products_information(G: nx.DiGraph):
     """Add product nodes with attributes to the graph.
     
-    In a real app this would read from a DB / CSV / API.
+    Reads product data from data/products.json and extracts:
+    - gpcCategoryCode.name as a string
+    - fullIngredientStatement as a list (parsed from ingredientStatement)
     """
-    products = [
-        ("cola", {"prio": 10, "tags": ["soda", "sweet"], "ingredients": ["water", "sugar", "cola_oil"]}),
-        ("diet_cola", {"prio": 8, "tags": ["soda", "diet"], "ingredients": ["water", "aspartame"]}),
-        ("orange_juice", {"prio": 7, "tags": ["juice", "citrus"], "ingredients": ["orange", "water"]}),
-        ("lemonade", {"prio": 6, "tags": ["citrus", "sweet"], "ingredients": ["lemon", "sugar", "water"]}),
-        ("sprite", {"prio": 9, "tags": ["soda", "citrus"], "ingredients": ["water", "sugar", "lemon", "lime"]}),
-        ("water", {"prio": 5, "tags": ["plain", "healthy"], "ingredients": ["water"]}),
-    ]
+    # Get the path to the products.json file
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    products_file = os.path.join(script_dir, "data", "products.json")
     
-    for product_id, attrs in products:
+    # Read the JSON file
+    with open(products_file, 'r', encoding='utf-8') as f:
+        products_data = json.load(f)
+    
+    # Process each product
+    for product in products_data:
+        # Extract product ID (using gtin or id as identifier)
+        product_id = product.get('gtin', product.get('id', ''))
+        if not product_id:
+            continue
+        
+        # Extract gpcCategoryCode.name as a string
+        gpc_category_name = ""
+        if 'gpcCategoryCode' in product and product['gpcCategoryCode']:
+            gpc_category_name = product['gpcCategoryCode'].get('name', '')
+        
+        # Extract fullIngredientStatement as a list of tuples (name, quantity)
+        # First check if fullIngredientStatement exists, otherwise parse ingredientStatement
+        full_ingredient_statement = []
+        if 'fullIngredientStatement' in product:
+            # If it's already a list of tuples, use it directly
+            if isinstance(product['fullIngredientStatement'], list):
+                full_ingredient_statement = product['fullIngredientStatement']
+            # If it's a string, parse it
+            elif isinstance(product['fullIngredientStatement'], str):
+                full_ingredient_statement = _parse_ingredients(product['fullIngredientStatement'])
+        elif 'ingredientStatement' in product and product['ingredientStatement']:
+            # Parse ingredientStatement string into tuples
+            full_ingredient_statement = _parse_ingredients(product['ingredientStatement'])
+        
+        # Add node with attributes
+        # Using the existing structure: prio, tags, ingredients
+        # We'll store gpcCategoryName and fullIngredientStatement as additional attributes
+        attrs = {
+            'prio': 5,  # Default priority, can be adjusted
+            'tags': [gpc_category_name] if gpc_category_name else [],
+            'ingredients': full_ingredient_statement,
+            'gpcCategoryName': gpc_category_name,
+            'fullIngredientStatement': full_ingredient_statement
+        }
+        
         G.add_node(product_id, **attrs)
 
 
@@ -52,8 +184,11 @@ def fill_in_sales_information(G: nx.DiGraph):
                 continue
             
             # Calculate similarities
-            ing_shared = len(set(node_data['ingredients']) & set(other_data['ingredients']))
-            tag_shared = len(set(node_data['tags']) & set(other_data['tags']))
+            # Extract ingredient names from tuples (name, quantity) for comparison
+            node_ing_names = {ing[0] for ing in node_data.get('ingredients', []) if isinstance(ing, tuple)}
+            other_ing_names = {ing[0] for ing in other_data.get('ingredients', []) if isinstance(ing, tuple)}
+            ing_shared = len(node_ing_names & other_ing_names)
+            tag_shared = len(set(node_data.get('tags', [])) & set(other_data.get('tags', [])))
             user_match = float(tag_shared) * 0.2  # placeholder for co-purchase data
             
             # Create Weight and add edge with attributes
