@@ -91,5 +91,18 @@ class IndexedPriorityList:
                 self._items[i] = (nid, val // 2)
                 break
 
+    # insert or update a product with its sales number as priority
+    def insert_by_sales(self, product_id: str, sales_number: int):
+        # Check if product already exists
+        for i, (nid, val) in enumerate(self._items):
+            if nid == product_id:
+                self._items[i] = (nid, int(sales_number))
+                self.sort(reverse=True)
+                return
+            
+        # Product doesn't exist, insert new entry
+        self._items.append((product_id, int(sales_number)))
+        self.sort(reverse=True)
+
     def __getitem__(self, idx):
         return self._items[idx]
