@@ -17,6 +17,7 @@ import networkx as nx
 from typing import List, Tuple
 from models import Weight
 from models import IndexedPriorityList
+from models import UserGroupWeight
 import re
 import pandas as pd
 
@@ -291,6 +292,10 @@ def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 5.0):
         min_weight_threshold: Minimum total weight required to create an edge (default: 5.0)
                             Lower values = more edges, higher values = more selective
     """
+    # Initialize UserGroupWeight for co-purchase data (only once!)
+    from models import UserGroupWeight
+    ugw = UserGroupWeight()
+        
     nodes = list(G.nodes(data=True))
     edges_added = 0
     edges_skipped = 0
@@ -311,8 +316,9 @@ def fill_in_sales_information(G: nx.DiGraph, min_weight_threshold: float = 5.0):
             tag_shared = len(set(node_data.get('tags', [])) & set(other_data.get('tags', [])))
             tag_match = float(tag_shared)
             
-            # User match (placeholder for co-purchase data)
-            user_match = float(tag_shared) * 0.2
+            # User match using co-purchase data
+            # node_id and other_id are EAN codes (gtin)
+            user_match = ugw.get_weight(node_id, other_id, normalize=True)
             
             # Create Weight and add edge with attributes
             weight = Weight(
