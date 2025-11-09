@@ -2,20 +2,80 @@
 
 Ett produktgraf-system för att representera och analysera relationer mellan produkter (t.ex. för vending machines).
 
-## Struktur
+## Projektstruktur 📁
 
-- `models.py` - Datamodeller (Weight, product_node, IndexedPriorityList)
-- `main.py` - Huvudlogik med NetworkX-graf
-- `visualize.py` - Visualiseringsfunktioner
-- `embeddings.py` - **Node2Vec graph embeddings för produktsökning** 🆕
-- `find_similar_products.py` - **Hitta liknande produkter med embeddings** 🆕
-- `requirements.txt` - Python-beroenden
+```
+flavour_graph/
+├── src/                        # Källkod
+│   ├── core/                   # Kärnfunktionalitet
+│   │   ├── main.py            # Graf-setup och huvudlogik
+│   │   ├── models.py          # Datamodeller
+│   │   └── subcategory_colors.py
+│   │
+│   ├── interactive/            # Interaktiv HTML-visualisering
+│   │   └── generate_html.py  # Canvas-baserad visualisering
+│   │
+│   ├── embeddings/             # Node2Vec embeddings
+│   │   ├── embeddings.py      # ProductEmbeddings klass
+│   │   └── find_similar.py    # Similarity search
+│   │
+│   └── visualization/          # Graf-visualiseringar
+│       └── visualize.py       # Matplotlib visualiseringar
+│
+├── scripts/                    # Utility scripts
+│   ├── convert_sales_to_user_pattern.py
+│   └── test_connections.py
+│
+├── output/                     # Genererade filer
+│   ├── interactive/           # HTML visualiseringar
+│   ├── embeddings/            # Embeddings visualiseringar
+│   └── visualizations/        # Graf-visualiseringar
+│
+├── data/                       # Data och modeller
+├── run_interactive.py          # 🚀 Kör interaktiv HTML
+├── run_embeddings.py           # 🚀 Kör embeddings search
+├── run_visualization.py        # 🚀 Kör graf-visualisering
+├── requirements.txt
+└── README.md
+```
 
-## Installation
+## Snabbstart 🚀
 
 ```bash
+# Installera dependencies
 pip install -r requirements.txt
+
+# 1. Generera interaktiv HTML-visualisering
+python run_interactive.py
+
+# 2. Hitta liknande produkter med embeddings
+python run_embeddings.py --visualize --visualize-3d --visualize-weights
+
+# 3. Rita grafen med matplotlib
+python run_visualization.py
 ```
+
+## Genererade Filer 📁
+
+Alla genererade filer sparas i separata undermappar under `output/`:
+
+### Interaktiv HTML (`output/interactive/`)
+- `interactive_selection.html` - **Interaktiv produktvalsvisualisation** 🎯
+  - Genereras med: `python run_interactive.py`
+  - Canvas-baserad snabb rendering
+  - Klicka "Next Selection" för att välja produkter stegvis
+  - Visar grafkopplingar och prioritetsändringar i realtid
+  - Zoom och panorering med musen
+
+### Embeddings (`output/embeddings/`)
+- `embeddings_visualization_2d.png` - 2D-plot av produktembeddings (t-SNE/PCA)
+- `embeddings_visualization_3d.html` - Interaktiv 3D plotly-visualisering
+- `embeddings_visualization_weights.html` - 3D-visualisering baserad på grafvikter
+  - Genereras med: `python run_embeddings.py --visualize --visualize-3d --visualize-weights`
+
+### Graf-visualiseringar (`output/visualizations/`)
+- Matplotlib-baserade grafer och visualiseringar
+  - Genereras med: `python run_visualization.py`
 
 ## Användning
 
@@ -55,6 +115,9 @@ python main.py
 
 # Visa graf-statistik och visualisering
 python visualize.py
+
+# Generera interaktiv HTML-visualisering 🆕
+python generate_interactive_html_fast.py
 
 # Hitta liknande produkter (Node2Vec embeddings) 🆕
 python find_similar_products.py

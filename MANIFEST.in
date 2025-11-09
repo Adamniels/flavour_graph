@@ -1,0 +1,15 @@
+include README.md
+include LICENSE
+include requirements.txt
+include STRUCTURE.md
+include GENERATE_FILES.md
+
+recursive-include src *.py
+recursive-include data *.json *.xlsx
+recursive-exclude data *.parquet *.pkl *.model
+
+recursive-include output .gitkeep
+recursive-exclude output *.html *.png *.jpg
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]

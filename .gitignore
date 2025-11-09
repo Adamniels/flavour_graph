@@ -42,11 +42,34 @@ ENV/
 .coverage
 htmlcov/
 
-# Matplotlib
-*.png
-*.jpg
-*.pdf
-!example*.png
+# Data files (large files should not be in git)
+data/*.parquet
+data/*.model
+data/*.pkl
+!data/*.json
+!data/*.xlsx
+
+# Generated models
+*.model
+*.pkl
+
+# Keep data structure
+!data/.gitkeep
+
+# Matplotlib & Generated outputs
+output/**/*.png
+output/**/*.jpg
+output/**/*.pdf
+output/**/*.html
+!docs/**/*.png
+!docs/**/*.jpg
+
+# Keep .gitkeep files
+!output/**/.gitkeep
+
+# Generated output files
+output/
+!output/**/.gitkeep
 
 # Data folder (ignore everywhere)
 **/data/
