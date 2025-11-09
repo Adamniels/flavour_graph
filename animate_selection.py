@@ -89,7 +89,7 @@ def create_animation(G: nx.DiGraph, priority_list: IndexedPriorityList, num_prod
         'current': None,
         'affected': [],
         'iteration': 0,
-        'priority_dict': copy.deepcopy(priority_list._items_dict)
+        'priority_dict': {nid: val for nid, val in priority_list._items}
     }
     
     # Get all product names for display
@@ -209,6 +209,19 @@ def create_animation(G: nx.DiGraph, priority_list: IndexedPriorityList, num_prod
                                       arrowsize=20,
                                       arrowstyle='->',
                                       ax=ax)
+                
+                # Draw edge labels showing weights for current edges
+                edge_labels = {(u, v): f"{G[u][v].get('weight', 0):.1f}" 
+                              for u, v in current_edges}
+                nx.draw_networkx_edge_labels(G, pos,
+                                             edge_labels=edge_labels,
+                                             font_size=9,
+                                             font_weight='bold',
+                                             bbox=dict(boxstyle='round,pad=0.3', 
+                                                     facecolor='yellow', 
+                                                     alpha=0.8,
+                                                     edgecolor='#FF6B00'),
+                                             ax=ax)
         else:
             # Draw all edges faintly
             nx.draw_networkx_edges(G, pos,
@@ -298,16 +311,26 @@ def create_animation(G: nx.DiGraph, priority_list: IndexedPriorityList, num_prod
                    fontsize=11, fontweight='bold', color='#FF6B00')
             y_pos -= line_height * 1.5
             
-            # Show top 5 affected
+            # Show top 5 affected with edge weights
             for i, (neighbor_id, old_prio, new_prio) in enumerate(state['affected_changes'][:5]):
                 neighbor_name = names[neighbor_id]
                 if len(neighbor_name) > 20:
                     neighbor_name = neighbor_name[:17] + '...'
                 
+                # Get edge weight
+                edge_weight = 0.0
+                if state['current']:
+                    edge_data = G.get_edge_data(state['current'], neighbor_id)
+                    if edge_data:
+                        edge_weight = edge_data.get('weight', 0.0)
+                
                 ax.text(0.05, y_pos, f"• {neighbor_name}",
                        fontsize=9)
-                ax.text(0.95, y_pos, f"{old_prio:.0f} → {new_prio:.0f}",
-                       fontsize=9, ha='right', color='#CC5500')
+                
+                # Show weight and priority change
+                reduction_pct = ((old_prio - new_prio) / old_prio * 100) if old_prio > 0 else 0
+                ax.text(0.95, y_pos, f"w:{edge_weight:.1f} | {old_prio:.0f}→{new_prio:.0f} (-{reduction_pct:.0f}%)",
+                       fontsize=8, ha='right', color='#CC5500', family='monospace')
                 y_pos -= line_height
             
             if len(state['affected_changes']) > 5:

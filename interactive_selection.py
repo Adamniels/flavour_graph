@@ -38,7 +38,7 @@ class InteractiveSelection:
         
         # Setup larger figure for better visibility
         self.fig = plt.figure(figsize=(24, 14))
-        gs = self.fig.add_gridspec(1, 2, width_ratios=[3, 1], wspace=0.2, bottom=0.08)
+        gs = self.fig.add_gridspec(1, 2, width_ratios=[2.5, 1], wspace=0.25, bottom=0.08)
         self.ax_graph = self.fig.add_subplot(gs[0])
         self.ax_stats = self.fig.add_subplot(gs[1])
         
@@ -239,24 +239,25 @@ class InteractiveSelection:
                                       arrowstyle='->',
                                       ax=self.ax_graph)
                 
-                # Draw edge labels showing weights (only for edges above threshold)
+                # Draw edge labels showing ALL weights (no threshold filter)
                 edge_labels = {}
                 for u, v in current_edges:
                     weight = self.G[u][v].get('weight', 0)
-                    if weight >= 5.0:  # Only show weights above threshold
-                        edge_labels[(u, v)] = f'{weight:.1f}'
+                    edge_labels[(u, v)] = f'{weight:.1f}'
                 
                 if edge_labels:
                     nx.draw_networkx_edge_labels(self.G, self.pos,
                                                  edge_labels=edge_labels,
-                                                 font_size=9,
+                                                 font_size=8,
                                                  font_weight='bold',
-                                                 font_color='white',
-                                                 bbox=dict(boxstyle='round,pad=0.3',
-                                                         facecolor='#FF6B00',
-                                                         edgecolor='none',
-                                                         alpha=0.8),
-                                                 ax=self.ax_graph)
+                                                 font_color='black',
+                                                 bbox=dict(boxstyle='round,pad=0.2',
+                                                         facecolor='yellow',
+                                                         edgecolor='#FF6B00',
+                                                         alpha=0.85,
+                                                         linewidth=1.5),
+                                                 ax=self.ax_graph,
+                                                 rotate=False)
         else:
             nx.draw_networkx_edges(self.G, self.pos,
                                   width=0.3,
@@ -265,43 +266,55 @@ class InteractiveSelection:
                                   arrows=False,
                                   ax=self.ax_graph)
         
-        # Draw labels for important nodes with background boxes for readability
+        # Draw labels for important nodes - centered on node for clarity
+        # Only show labels for nodes not too far to the right (to avoid overlap with stats panel)
         labels_to_draw = {}
+        affected_ids = [n[0] for n in self.affected_neighbors]
+        
+        # Get position bounds
+        x_positions = [self.pos[node][0] for node in self.G.nodes()]
+        x_max = max(x_positions)
+        x_threshold = x_max * 0.85  # Only show labels for nodes in left 85% of graph
+        
         for node in self.G.nodes():
             if node == self.current_selection or node in self.selected or node in affected_ids:
-                name = self.product_names[node]
-                if len(name) > 20:
-                    name = name[:17] + '...'
-                labels_to_draw[node] = name
+                # Check if node is not too far right (avoid stats panel overlap)
+                if self.pos[node][0] < x_threshold:
+                    name = self.product_names[node]
+                    if len(name) > 18:
+                        name = name[:15] + '...'
+                    labels_to_draw[node] = name
         
-        # Draw labels with semi-transparent white background for visibility without blocking node colors
+        # Draw labels CENTERED on nodes with semi-transparent background
         for node, label in labels_to_draw.items():
             x, y = self.pos[node]
             
-            # Small white box with transparency so node color shows through
+            # Center labels directly on nodes - NO offset
             self.ax_graph.text(x, y, label,
-                             fontsize=7,
+                             fontsize=6.5,
                              fontweight='bold',
                              color='black',
                              ha='center',
                              va='center',
-                             bbox=dict(boxstyle='round,pad=0.2',
+                             bbox=dict(boxstyle='round,pad=0.15',
                                      facecolor='white',
-                                     edgecolor='none',
-                                     linewidth=0,
-                                     alpha=0.75))  # More transparent to show node color
+                                     edgecolor='black',
+                                     linewidth=0.5,
+                                     alpha=0.9),
+                             clip_on=True,
+                             zorder=1000)
         
         # Title
         self.ax_graph.set_title(f'Interactive Product Selection - Step {self.iteration}/{self.num_products}',
                                fontsize=18, fontweight='bold', pad=20)
         
-        # Legend - show ALL subcategories + state indicators
+        # Legend - show ALL subcategories + state indicators (no emojis to avoid warnings)
         legend_elements = [
             # State indicators
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#00FF00',
-                      markersize=15, label='🌟 Just Selected', markeredgecolor='#FFD700', markeredgewidth=2),
+                      markersize=15, label='Just Selected', markeredgecolor='#FFD700', markeredgewidth=2),
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#FFFF00',
-                      markersize=12, label='⚡ Priority Decreased', markeredgecolor='#FFA500', markeredgewidth=2),
+                      markersize=12, label='Priority Decreased', markeredgecolor='#FFA500', markeredgewidth=2),
         ]
         
         # Add ALL subcategories to legend, sorted by count
@@ -344,71 +357,90 @@ class InteractiveSelection:
                fontsize=12, fontweight='bold')
         y_pos -= line_height * 1.5
         
-        # Current selection
+        # Current selection - draw box FIRST, then text INSIDE
         if self.current_selection:
             current_name = self.product_names[self.current_selection]
             # Don't truncate - show full name in the box
             # Split into multiple lines if too long
-            if len(current_name) > 35:
+            if len(current_name) > 30:
                 # Try to split at space
                 words = current_name.split()
                 line1 = ""
                 line2 = ""
                 for word in words:
-                    if len(line1) + len(word) < 30:
+                    if len(line1) + len(word) < 25:
                         line1 += word + " "
                     else:
                         line2 += word + " "
                 line1 = line1.strip()
                 line2 = line2.strip()
                 
-                # Adjust box height for two lines
-                ax.add_patch(plt.Rectangle((0.02, y_pos - 0.04), 0.96, 0.08,
+                # Draw box FIRST for two lines - positioned to contain all text
+                box_height = 0.11
+                box_y = y_pos - 0.085
+                ax.add_patch(plt.Rectangle((0.02, box_y), 0.96, box_height,
                                           edgecolor='#00FF00', facecolor='#E0FFE0', linewidth=2))
                 
-                ax.text(0.5, y_pos, f'JUST SELECTED:', ha='center',
+                # Now draw text INSIDE the box
+                ax.text(0.5, y_pos - 0.01, 'JUST SELECTED:', ha='center',
                        fontsize=11, fontweight='bold', color='#006600')
-                y_pos -= line_height
-                ax.text(0.5, y_pos, line1, ha='center',
+                ax.text(0.5, y_pos - 0.035, line1, ha='center',
                        fontsize=10, fontweight='bold', color='#003300')
-                y_pos -= line_height * 0.9
-                ax.text(0.5, y_pos, line2, ha='center',
+                ax.text(0.5, y_pos - 0.06, line2, ha='center',
                        fontsize=10, fontweight='bold', color='#003300')
-                y_pos -= line_height * 1.3
+                y_pos -= box_height + line_height * 0.3
             else:
-                ax.add_patch(plt.Rectangle((0.02, y_pos - 0.03), 0.96, 0.06,
+                # Draw box FIRST for single line - positioned to contain text
+                box_height = 0.08
+                box_y = y_pos - 0.065
+                ax.add_patch(plt.Rectangle((0.02, box_y), 0.96, box_height,
                                           edgecolor='#00FF00', facecolor='#E0FFE0', linewidth=2))
                 
-                ax.text(0.5, y_pos, f'JUST SELECTED:', ha='center',
+                # Now draw text INSIDE the box
+                ax.text(0.5, y_pos - 0.01, 'JUST SELECTED:', ha='center',
                        fontsize=11, fontweight='bold', color='#006600')
-                y_pos -= line_height
-                ax.text(0.5, y_pos, current_name, ha='center',
+                ax.text(0.5, y_pos - 0.038, current_name, ha='center',
                        fontsize=10, fontweight='bold', color='#003300')
-                y_pos -= line_height
+                y_pos -= box_height + line_height * 0.3
                 
-                # Show subcategory
+                # Show subcategory (removed emoji to avoid font warnings)
                 subcategory = self.G.nodes[self.current_selection].get('subcategory', 'Unknown')
                 subcat_color = get_subcategory_color(subcategory)
-                ax.text(0.5, y_pos, f'📦 {subcategory}', ha='center',
+                ax.text(0.5, y_pos, f'Category: {subcategory}', ha='center',
                        fontsize=9, style='italic', color=subcat_color, fontweight='bold')
                 y_pos -= line_height * 1.5
         
-        # Affected neighbors
+        # Affected neighbors with edge weights
         if self.affected_neighbors:
             ax.text(0.05, y_pos, f"Neighbors affected: {len(self.affected_neighbors)}",
                    fontsize=11, fontweight='bold', color='#FF6B00')
             y_pos -= line_height * 1.5
             
+            # Show top 8 affected neighbors with weight and % reduction
             for i, (neighbor_id, old_prio, new_prio) in enumerate(self.affected_neighbors[:8]):
                 neighbor_name = self.product_names[neighbor_id]
-                if len(neighbor_name) > 20:
-                    neighbor_name = neighbor_name[:17] + '...'
+                if len(neighbor_name) > 18:
+                    neighbor_name = neighbor_name[:15] + '...'
                 
+                # Get edge weight
+                edge_weight = 0.0
+                if self.current_selection:
+                    edge_data = self.G.get_edge_data(self.current_selection, neighbor_id)
+                    if edge_data:
+                        edge_weight = edge_data.get('weight', 0.0)
+                
+                # Calculate reduction percentage
+                reduction_pct = ((old_prio - new_prio) / old_prio * 100) if old_prio > 0 else 0
+                
+                # Left side: product name
                 ax.text(0.05, y_pos, f"• {neighbor_name}",
-                       fontsize=9)
-                ax.text(0.95, y_pos, f"{old_prio:.0f} → {new_prio:.0f}",
-                       fontsize=9, ha='right', color='#CC5500')
-                y_pos -= line_height
+                       fontsize=8)
+                
+                # Right side: weight and priority change (compact format)
+                info_text = f"w:{edge_weight:.1f} {old_prio:.0f}→{new_prio:.0f} (-{reduction_pct:.0f}%)"
+                ax.text(0.98, y_pos, info_text,
+                       fontsize=7.5, ha='right', color='#CC5500', family='monospace')
+                y_pos -= line_height * 0.95
             
             if len(self.affected_neighbors) > 8:
                 ax.text(0.05, y_pos, f"  ... and {len(self.affected_neighbors) - 8} more",

@@ -84,20 +84,67 @@ def draw_graph(G: nx.DiGraph,
                           edgecolors=node_borders,
                           linewidths=3)
     
-    # Draw edges with varying thickness based on weight
+    # Draw edges with varying thickness and color based on weight
     if edges_to_draw:
+        print(f"Drawing {len(edges_to_draw)} edges...")
         edge_weights = [G[u][v].get('weight', 1) for u, v in edges_to_draw]
         max_weight = max(edge_weights) if edge_weights else 1
-        edge_widths = [w / max_weight * 3 for w in edge_weights]
         
-        nx.draw_networkx_edges(G, pos,
-                              edgelist=edges_to_draw,
-                              width=edge_widths,
-                              alpha=0.3,
-                              edge_color='gray',
-                              arrows=True,
-                              arrowsize=15,
-                              arrowstyle='->')
+        print(f"Weight range: {min(edge_weights):.1f} - {max_weight:.1f}")
+        print(f"Thresholds: Weak < {max_weight * 0.1:.1f}, Medium < {max_weight * 0.5:.1f}, Strong >= {max_weight * 0.5:.1f}")
+        
+        # Calculate percentage of max weight for each edge
+        weight_percentages = [w / max_weight for w in edge_weights]
+        
+        # Group edges by strength category based on percentage of max weight
+        # Weak: < 10% of max, Medium: 10-50% of max, Strong: >= 50% of max
+        weak_edges = [(u, v, idx) for idx, (u, v) in enumerate(edges_to_draw) if weight_percentages[idx] < 0.10]
+        medium_edges = [(u, v, idx) for idx, (u, v) in enumerate(edges_to_draw) if 0.10 <= weight_percentages[idx] < 0.50]
+        strong_edges = [(u, v, idx) for idx, (u, v) in enumerate(edges_to_draw) if weight_percentages[idx] >= 0.50]
+        
+        # Draw weak edges (batched) - very thin and transparent
+        if weak_edges:
+            weak_edgelist = [(u, v) for u, v, _ in weak_edges]
+            # Thin lines for weak connections (0.3-1.0)
+            weak_widths = [0.3 + weight_percentages[idx] / 0.10 * 0.7 for _, _, idx in weak_edges]
+            nx.draw_networkx_edges(G, pos,
+                                  edgelist=weak_edgelist,
+                                  width=weak_widths,
+                                  alpha=0.15,
+                                  edge_color='lightgray',
+                                  arrows=True,
+                                  arrowsize=8,
+                                  arrowstyle='->')
+        
+        # Draw medium edges (batched) - medium thickness
+        if medium_edges:
+            medium_edgelist = [(u, v) for u, v, _ in medium_edges]
+            # Medium lines (1.5-4.0)
+            medium_widths = [1.5 + ((weight_percentages[idx] - 0.10) / 0.40) * 2.5 for _, _, idx in medium_edges]
+            nx.draw_networkx_edges(G, pos,
+                                  edgelist=medium_edgelist,
+                                  width=medium_widths,
+                                  alpha=0.5,
+                                  edge_color='gray',
+                                  arrows=True,
+                                  arrowsize=15,
+                                  arrowstyle='->')
+        
+        # Draw strong edges (batched) - thick and dark
+        if strong_edges:
+            strong_edgelist = [(u, v) for u, v, _ in strong_edges]
+            # Thick lines for strong connections (5.0-8.0)
+            strong_widths = [5.0 + ((weight_percentages[idx] - 0.50) / 0.50) * 3.0 for _, _, idx in strong_edges]
+            nx.draw_networkx_edges(G, pos,
+                                  edgelist=strong_edgelist,
+                                  width=strong_widths,
+                                  alpha=0.85,
+                                  edge_color='black',
+                                  arrows=True,
+                                  arrowsize=25,
+                                  arrowstyle='->')
+        
+        print(f"✓ Drew {len(weak_edges)} weak, {len(medium_edges)} medium, {len(strong_edges)} strong edges")
     
     # Create labels using product names instead of IDs
     labels = {}
@@ -142,6 +189,33 @@ def draw_graph(G: nx.DiGraph,
     plt.legend(handles=legend_elements, loc='upper left', 
               fontsize=8, ncol=2, framealpha=0.95,
               columnspacing=0.5, handletextpad=0.3)
+    
+    # Add edge weight legend
+    ax = plt.gca()
+    
+    # Create example lines showing weak, medium, and strong connections
+    from matplotlib.lines import Line2D
+    edge_legend_elements = [
+        Line2D([0], [0], color='lightgray', linewidth=0.5, 
+               label='Weak (< 10% of max)', alpha=0.4),
+        Line2D([0], [0], color='gray', linewidth=2.5, 
+               label='Medium (10-50% of max)', alpha=0.6),
+        Line2D([0], [0], color='black', linewidth=6.5, 
+               label='Strong (≥ 50% of max)', alpha=0.85)
+    ]
+    
+    # Add second legend in upper right for edge weights
+    edge_legend = plt.legend(handles=edge_legend_elements, 
+                            loc='upper right', 
+                            fontsize=8, 
+                            framealpha=0.95,
+                            title='Connection Strength',
+                            title_fontsize=9)
+    
+    # Add the subcategory legend back (matplotlib removes the first when adding second)
+    ax.add_artist(plt.legend(handles=legend_elements, loc='upper left', 
+                             fontsize=8, ncol=2, framealpha=0.95,
+                             columnspacing=0.5, handletextpad=0.3))
     
     plt.title('Flavour Graph - Product Relationships', fontsize=16, fontweight='bold')
     plt.axis('off')
@@ -218,28 +292,70 @@ def draw_subgraph(G: nx.DiGraph,
                           edgecolors=node_borders,
                           linewidths=4)
     
-    # Draw edges with varying thickness
+    # Draw edges with varying thickness and color based on weight
     if subgraph.number_of_edges() > 0:
-        edge_weights = [subgraph[u][v].get('weight', 0) for u, v in subgraph.edges()]
+        edges_list = list(subgraph.edges())
+        edge_weights = [subgraph[u][v].get('weight', 0) for u, v in edges_list]
         max_weight = max(edge_weights) if edge_weights else 1
-        edge_widths = [max(w / max_weight * 4, 0.5) for w in edge_weights]
         
-        nx.draw_networkx_edges(subgraph, pos,
-                              width=edge_widths,
-                              alpha=0.6,
-                              edge_color='gray',
-                              arrows=True,
-                              arrowsize=20,
-                              arrowstyle='->')
+        print(f"Subgraph weight range: {min(edge_weights):.1f} - {max_weight:.1f}")
         
-        # Draw edge labels showing weights
+        # Calculate percentage of max weight for each edge
+        weight_percentages = [w / max_weight for w in edge_weights]
+        
+        # Group edges by strength (10% / 50% thresholds)
+        weak_edges = [(u, v, idx) for idx, (u, v) in enumerate(edges_list) if weight_percentages[idx] < 0.10]
+        medium_edges = [(u, v, idx) for idx, (u, v) in enumerate(edges_list) if 0.10 <= weight_percentages[idx] < 0.50]
+        strong_edges = [(u, v, idx) for idx, (u, v) in enumerate(edges_list) if weight_percentages[idx] >= 0.50]
+        
+        # Draw weak edges
+        if weak_edges:
+            weak_edgelist = [(u, v) for u, v, _ in weak_edges]
+            weak_widths = [0.5 + weight_percentages[idx] / 0.10 * 1.0 for _, _, idx in weak_edges]
+            nx.draw_networkx_edges(subgraph, pos,
+                                  edgelist=weak_edgelist,
+                                  width=weak_widths,
+                                  alpha=0.25,
+                                  edge_color='lightgray',
+                                  arrows=True,
+                                  arrowsize=10,
+                                  arrowstyle='->')
+        
+        # Draw medium edges
+        if medium_edges:
+            medium_edgelist = [(u, v) for u, v, _ in medium_edges]
+            medium_widths = [2.0 + ((weight_percentages[idx] - 0.10) / 0.40) * 3.0 for _, _, idx in medium_edges]
+            nx.draw_networkx_edges(subgraph, pos,
+                                  edgelist=medium_edgelist,
+                                  width=medium_widths,
+                                  alpha=0.6,
+                                  edge_color='gray',
+                                  arrows=True,
+                                  arrowsize=18,
+                                  arrowstyle='->')
+        
+        # Draw strong edges
+        if strong_edges:
+            strong_edgelist = [(u, v) for u, v, _ in strong_edges]
+            strong_widths = [6.0 + ((weight_percentages[idx] - 0.50) / 0.50) * 4.0 for _, _, idx in strong_edges]
+            nx.draw_networkx_edges(subgraph, pos,
+                                  edgelist=strong_edgelist,
+                                  width=strong_widths,
+                                  alpha=0.9,
+                                  edge_color='black',
+                                  arrows=True,
+                                  arrowsize=30,
+                                  arrowstyle='->')
+        
+        # Draw edge labels showing ALL weights (no filter)
         edge_labels = {(u, v): f"{d['weight']:.1f}" 
                       for u, v, d in subgraph.edges(data=True)}
+        
         nx.draw_networkx_edge_labels(subgraph, pos,
                                      edge_labels=edge_labels,
-                                     font_size=10,
+                                     font_size=8,
                                      font_weight='bold',
-                                     bbox=dict(boxstyle='round,pad=0.3', 
+                                     bbox=dict(boxstyle='round,pad=0.2', 
                                              facecolor='yellow', 
                                              alpha=0.7))
     
