@@ -37,8 +37,8 @@ class InteractiveSelection:
         print(f"\nCreated colormap for {len(self.subcategory_colors)} subcategories")
         
         # Setup larger figure for better visibility
-        self.fig = plt.figure(figsize=(24, 14))
-        gs = self.fig.add_gridspec(1, 2, width_ratios=[2.5, 1], wspace=0.25, bottom=0.08)
+        self.fig = plt.figure(figsize=(26, 14))
+        gs = self.fig.add_gridspec(1, 2, width_ratios=[2, 1], wspace=0.25, bottom=0.08)
         self.ax_graph = self.fig.add_subplot(gs[0])
         self.ax_stats = self.fig.add_subplot(gs[1])
         
@@ -413,7 +413,7 @@ class InteractiveSelection:
         # Affected neighbors with edge weights
         if self.affected_neighbors:
             ax.text(0.05, y_pos, f"Neighbors affected: {len(self.affected_neighbors)}",
-                   fontsize=11, fontweight='bold', color='#FF6B00')
+                   fontsize=13, fontweight='bold', color='#FF6B00')
             y_pos -= line_height * 1.5
             
             # Show top 8 affected neighbors with weight and % reduction
@@ -434,12 +434,12 @@ class InteractiveSelection:
                 
                 # Left side: product name
                 ax.text(0.05, y_pos, f"• {neighbor_name}",
-                       fontsize=8)
+                       fontsize=10)
                 
                 # Right side: weight and priority change (compact format)
                 info_text = f"w:{edge_weight:.1f} {old_prio:.0f}→{new_prio:.0f} (-{reduction_pct:.0f}%)"
                 ax.text(0.98, y_pos, info_text,
-                       fontsize=7.5, ha='right', color='#CC5500', family='monospace')
+                       fontsize=10, ha='right', color='#CC5500', family='monospace', fontweight='bold')
                 y_pos -= line_height * 0.95
             
             if len(self.affected_neighbors) > 8:

@@ -205,7 +205,9 @@ def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityLis
             background:#FFF7ED;
             border-left:3px solid #F59E0B;
             border-radius:4px;
-            font-size:12px
+            font-size:12px;
+            word-wrap:break-word;
+            overflow-wrap:break-word
         }}
         .selected-item{{
             background:#F9FAFB;
@@ -250,7 +252,6 @@ def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityLis
                 </div>
             </div>
             <div id="currentSelection"></div>
-            <div id="connections"></div>
             <div id="affectedNeighbors"></div>
             <div id="selectedProducts"></div>
         </div>
@@ -390,7 +391,7 @@ def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityLis
                     nodeSize=8; // Fixed size for selected
                     borderColor='#374151';
                     borderWidth=2;
-                }}else if(affectedNeighbors.includes(node.i)){{
+                }}else if(affectedNeighbors.some(n=>n.id===node.i)){{
                     nodeSize=9; // Fixed size for affected
                     borderColor='#F59E0B';
                     borderWidth=2;
@@ -407,7 +408,8 @@ def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityLis
             }});
             
             // Draw labels for important nodes only
-            const important=[currentSelection,...selected.slice(-5),...affectedNeighbors.slice(0,5)].filter(Boolean);
+            const affectedIds=affectedNeighbors.map(n=>n.id);
+            const important=[currentSelection,...selected.slice(-5),...affectedIds].filter(Boolean);
             important.forEach(nodeId=>{{
                 const node=nodeMap[nodeId];
                 if(node){{
@@ -435,43 +437,15 @@ def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityLis
                 currentDiv.innerHTML=`<div class="stat-card current"><div class="stat-label">Now Selecting</div><div class="product-name">${{node.f}}</div><div class="product-category" style="color:${{color}}">${{node.s}}</div></div>`;
             }}else{{currentDiv.innerHTML=''}}
             
-            // Show connections with weights
-            const connectionsDiv=document.getElementById('connections');
-            if(currentSelection){{
-                const connections=[];
-                edges.forEach(e=>{{
-                    const [u,v,w]=e;
-                    if(u===currentSelection||v===currentSelection){{
-                        const otherId=u===currentSelection?v:u;
-                        const otherNode=nodeMap[otherId];
-                        if(otherNode){{
-                            connections.push({{id:otherId,name:otherNode.f,weight:w}});
-                        }}
-                    }}
-                }});
-                // Sort by weight descending
-                connections.sort((a,b)=>b.weight-a.weight);
-                if(connections.length>0){{
-                    let html='<div class="stat-card"><div class="stat-label">Connections (Weight)</div><ul class="affected-list">';
-                    connections.forEach(conn=>{{
-                        html+=`<li class="affected-item">${{conn.name}}<br><small>Weight: ${{conn.weight.toFixed(2)}}</small></li>`;
-                    }});
-                    html+='</ul></div>';
-                    connectionsDiv.innerHTML=html;
-                }}else{{connectionsDiv.innerHTML=''}}
-            }}else{{connectionsDiv.innerHTML=''}}
-            
             // Show all affected neighbors
             const affectedDiv=document.getElementById('affectedNeighbors');
             if(affectedNeighbors.length>0){{
                 let html='<div class="stat-card"><div class="stat-label">Affected Neighbors (${{affectedNeighbors.length}})</div><ul class="affected-list">';
-                affectedNeighbors.forEach(neighborId=>{{
-                    const node=nodeMap[neighborId];
+                affectedNeighbors.forEach(neighbor=>{{
+                    const node=nodeMap[neighbor.id];
                     if(node){{
-                        const oldPrio=originalPriorityList[neighborId]||0;
-                        const newPrio=priorityList[neighborId]||0;
-                        const reduction=oldPrio>0?((oldPrio-newPrio)/oldPrio*100).toFixed(0):0;
-                        html+=`<li class="affected-item">${{node.f}}<br><small>${{oldPrio.toLocaleString()}} → ${{newPrio.toLocaleString()}} (-${{reduction}}%)</small></li>`;
+                        const reduction=neighbor.oldPrio>0?((neighbor.oldPrio-neighbor.newPrio)/neighbor.oldPrio*100).toFixed(0):0;
+                        html+=`<li class="affected-item">${{node.f}}<br><small>${{neighbor.oldPrio.toLocaleString()}} → ${{neighbor.newPrio.toLocaleString()}} (-${{reduction}}%)</small></li>`;
                     }}
                 }});
                 html+='</ul></div>';
@@ -484,7 +458,8 @@ def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityLis
                 selected.slice(-10).forEach((prodId,idx)=>{{
                     const node=nodeMap[prodId];
                     if(node){{
-                        const num=selected.length-10+idx+1;
+                        const startNum=Math.max(1,selected.length-9);
+                        const num=startNum+idx;
                         const isCurrent=prodId===currentSelection;
                         html+=`<li class="selected-item ${{isCurrent?'current':''}}">${{num}}. ${{node.n}}</li>`;
                     }}
@@ -524,7 +499,7 @@ def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityLis
                     const newPrio=Math.max(1,Math.floor(oldPrio*(1-reductionFactor)));
                     if(oldPrio!==newPrio){{
                         priorityList[neighborId]=newPrio;
-                        affectedNeighbors.push(neighborId);
+                        affectedNeighbors.push({{id:neighborId,oldPrio:oldPrio,newPrio:newPrio}});
                     }}
                 }}
             }});
@@ -533,6 +508,14 @@ def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityLis
             currentSelection=highestId;
             iteration++;
             delete priorityList[highestId];
+            
+            // Reset zoom and pan to default view
+            zoomLevel=1;
+            panX=0;
+            panY=0;
+            scale=baseScale*zoomLevel;
+            translateX=(width-(maxX+minX)*scale)/2;
+            translateY=(height-(maxY+minY)*scale)/2;
             
             drawGraph();
             updateStatsPanel();
@@ -577,7 +560,7 @@ def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityLis
             
             // Zoom
             const zoomFactor=e.deltaY>0?0.9:1.1;
-            zoomLevel=Math.max(0.1,Math.min(10,zoomLevel*zoomFactor));
+            zoomLevel=Math.max(0.1,Math.min(50,zoomLevel*zoomFactor));
             
             // Calculate new transform
             scale=baseScale*zoomLevel;
