@@ -7,10 +7,76 @@ import networkx as nx
 import pandas as pd
 from pathlib import Path
 from .models import IndexedPriorityList
-from .data_loaders import add_product_nodes, load_copurchase_relations
+from .data_loaders import load_product_data, load_subcategories, load_copurchase_relations
+from .parsers import parse_ingredients, extract_product_name
 from .edge_weights import add_weighted_edges
 from .connections import add_subcategory_connections
 from src.config import SALES_FILE, DEFAULT_MIN_EDGE_WEIGHT
+
+
+def _add_product_nodes(G: nx.DiGraph):
+    """Add product nodes with attributes to the graph.
+    
+    Reads product data from data/products.json for ingredients and names,
+    and data/products.parquet for subcategories.
+    
+    Args:
+        G: NetworkX graph to populate with nodes
+        
+    Note:
+        This is a private helper function used internally by setup_graph().
+    """
+    # Load subcategories first
+    ean_to_subcategory = load_subcategories()
+    
+    # Load product data
+    products_data = load_product_data()
+    
+    # Process each product
+    for product in products_data:
+        # Extract product ID (using gtin or id as identifier)
+        product_id = product.get('gtin', product.get('id', ''))
+        if not product_id:
+            continue
+        
+        # Extract gpcCategoryCode.name as a string
+        gpc_category_name = ""
+        if 'gpcCategoryCode' in product and product['gpcCategoryCode']:
+            gpc_category_name = product['gpcCategoryCode'].get('name', '')
+        
+        # Extract fullIngredientStatement as a list of tuples (name, quantity)
+        full_ingredient_statement = []
+        if 'fullIngredientStatement' in product:
+            if isinstance(product['fullIngredientStatement'], list):
+                full_ingredient_statement = product['fullIngredientStatement']
+            elif isinstance(product['fullIngredientStatement'], str):
+                full_ingredient_statement = parse_ingredients(product['fullIngredientStatement'])
+        elif 'ingredientStatement' in product and product['ingredientStatement']:
+            full_ingredient_statement = parse_ingredients(product['ingredientStatement'])
+        
+        # Extract product name
+        product_name = extract_product_name(product)
+        
+        # Get subcategory from parquet data
+        subcategory = ean_to_subcategory.get(product_id, 'Unknown')
+        
+        # Build tags list - subcategory is NOT a tag, it's a separate attribute
+        tags = []
+        if gpc_category_name:
+            tags.append(gpc_category_name)
+        
+        # Add node with attributes including subcategory
+        attrs = {
+            'prio': 5,
+            'tags': tags,
+            'ingredients': full_ingredient_statement,
+            'gpcCategoryName': gpc_category_name,
+            'fullIngredientStatement': full_ingredient_statement,
+            'name': product_name,
+            'subcategory': subcategory  # Separate attribute, not a tag
+        }
+        
+        G.add_node(product_id, **attrs)
 
 
 def setup_graph(min_edge_weight: float = None) -> nx.DiGraph:
@@ -49,7 +115,7 @@ def setup_graph(min_edge_weight: float = None) -> nx.DiGraph:
     
     # 2. Add product nodes with attributes from JSON and Parquet files
     print("\n[1/3] Loading product data...")
-    add_product_nodes(G)
+    _add_product_nodes(G)
     print(f"✓ Added {G.number_of_nodes()} products to graph")
     
     # 3. Compute and add similarity-based edges

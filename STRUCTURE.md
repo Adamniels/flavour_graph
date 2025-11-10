@@ -26,8 +26,13 @@ flavour_graph/
 Innehåller grundläggande funktionalitet som används av alla andra moduler.
 
 **Filer:**
-- `main.py` - Graf-setup, edge creation, priority lists
-- `models.py` - Datamodeller (Weight, product_node, IndexedPriorityList)
+- `graph_setup.py` - High-level orchestration (setup_graph, create_priority_list_from_sales)
+- `selection_algorithm.py` - Produktvalsalgoritm med penalty propagation
+- `data_loaders.py` - Fil-I/O operationer (JSON, Parquet)
+- `parsers.py` - Text-parsing utilities (ingredienser, EAN)
+- `edge_weights.py` - Likhetsberäkningar för grafkanter
+- `connections.py` - Graf-kopplingar (underkategori, ingrediens)
+- `models.py` - Datamodeller (Weight, IndexedPriorityList)
 - `subcategory_colors.py` - Färgmappning för produktkategorier
 
 **Ansvar:**
@@ -35,6 +40,8 @@ Innehåller grundläggande funktionalitet som används av alla andra moduler.
 - Skapa NetworkX-graf med edges baserat på relationer
 - Hantera prioritetslistor från försäljningsdata
 - Generera produkturval baserat på prioriteter
+
+Se **[src/core/README.md](src/core/README.md)** för fullständig dokumentation.
 
 ---
 
@@ -174,14 +181,23 @@ Alla imports använder nu absoluta paths från `src`:
 ```python
 # I run_interactive.py
 from src.interactive.generate_html import generate_html_visualization
-from src.core.main import setup_graph, create_priority_list_from_sales
+from src.core import setup_graph, create_priority_list_from_sales
 
 # I src/embeddings/find_similar.py
-from src.core.main import setup_graph
+from src.core import setup_graph
 from src.embeddings.embeddings import ProductEmbeddings
 
 # I src/visualization/visualize.py
 from src.core.subcategory_colors import get_subcategory_color
+
+# I dina egna script
+from src.core import (
+    setup_graph,
+    create_priority_list_from_sales,
+    generate,
+    Weight,
+    IndexedPriorityList
+)
 ```
 
 Detta ger:
@@ -194,14 +210,24 @@ Detta ger:
 
 ## Path-hantering
 
-Alla data-paths är nu relativa till project root, inte script directory.
+Alla data-paths är nu relativa till project root via `src/config.py`.
 
-**Exempel från `src/core/main.py`:**
+**Exempel från `src/config.py`:**
 ```python
-# Get project root (two levels up from this file)
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(os.path.dirname(script_dir))
-products_file = os.path.join(project_root, "data", "products.json")
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+
+# Data files
+PRODUCTS_FILE = DATA_DIR / "products.json"
+SALES_FILE = DATA_DIR / "Sales_2025.parquet"
+
+# Output directories
+INTERACTIVE_OUTPUT = OUTPUT_DIR / "interactive"
+EMBEDDINGS_OUTPUT = OUTPUT_DIR / "embeddings"
+VISUALIZATIONS_OUTPUT = OUTPUT_DIR / "visualizations"
 ```
 
 Detta säkerställer att paths fungerar oavsett var scriptet körs ifrån.
@@ -251,26 +277,37 @@ find_similar_products.py
 **Nu:** Organiserat i moduler
 ```
 src/
-  core/main.py
-  core/models.py
-  embeddings/embeddings.py
-  visualization/visualize.py
-  interactive/generate_html.py
-  embeddings/find_similar.py
+  core/
+    graph_setup.py
+    selection_algorithm.py
+    data_loaders.py
+    parsers.py
+    edge_weights.py
+    connections.py
+    models.py
+    subcategory_colors.py
+  embeddings/
+    embeddings.py
+    find_similar.py
+  visualization/
+    visualize.py
+  interactive/
+    generate_html.py
 run_interactive.py
 run_embeddings.py
 run_visualization.py
 ```
 
 **Ändrade imports:**
-- `from main import` → `from src.core.main import`
+- `from main import` → `from src.core import` (eller specifik modul)
 - `from embeddings import` → `from src.embeddings.embeddings import`
-- etc.
+- `from generate_interactive_html_fast import` → `from src.interactive.generate_html import`
 
 **Nya output-paths:**
-- `output/html/` → `output/interactive/`
-- `output/visualizations/` → `output/embeddings/` (för embeddings)
-- `output/visualizations/` → `output/visualizations/` (för grafer)
+- Alla outputs går nu till specifika mappar under `output/`:
+  - `output/interactive/` - HTML-visualiseringar
+  - `output/embeddings/` - Embeddings-visualiseringar
+  - `output/visualizations/` - Graf-visualiseringar
 
 ---
 

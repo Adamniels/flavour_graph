@@ -165,7 +165,7 @@ python run_embeddings.py --visualize --visualize-3d --visualize-weights
 ## Datakällor
 
 **Input:**
-- NetworkX-graf från `src/core/main.py`
+- NetworkX-graf från `src.core` (graph_setup)
 - Produktrelationer från `data/product_relations.json`
 
 **Output - Tränade modeller:**
@@ -193,7 +193,7 @@ python run_embeddings.py --visualize --visualize-3d --visualize-weights
 ## Exempel: Hitta Liknande Produkter
 
 ```python
-from src.core.main import setup_graph
+from src.core import setup_graph
 from src.embeddings.embeddings import ProductEmbeddings
 
 # Skapa graf
@@ -231,7 +231,7 @@ embeddings.train(p=1.0, q=1.0)  # Standardvärden
 ## Läs mer
 
 För djupare förklaring av algoritmer och koncept, se:
-- **[EMBEDDINGS_EXPLAINED.md](../../EMBEDDINGS_EXPLAINED.md)** - Detaljerad förklaring av Node2Vec
+- **[EMBEDDINGS_EXPLAINED.md](EMBEDDINGS_EXPLAINED.md)** - Detaljerad förklaring av Node2Vec (i samma mapp)
 - **[Original Node2Vec Paper](https://arxiv.org/abs/1607.00653)** - Akademisk referens
 
 ## Användningsfall

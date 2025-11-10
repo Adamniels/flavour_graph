@@ -441,7 +441,7 @@ python run_visualization.py
 
 ### Direkt import:
 ```python
-from src.core.main import setup_graph
+from src.core import setup_graph
 from src.visualization.visualize import draw_graph, draw_subgraph, print_graph_stats
 
 # Skapa graf

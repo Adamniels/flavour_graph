@@ -19,7 +19,7 @@ from .graph_setup import setup_graph, create_priority_list_from_sales
 from .selection_algorithm import generate
 
 # Data models
-from .models import Weight, product_node, IndexedPriorityList
+from .models import Weight, IndexedPriorityList
 
 # Visualization utilities
 from .subcategory_colors import get_subcategory_color, create_subcategory_colormap
@@ -38,7 +38,6 @@ __all__ = [
     
     # Data models
     'Weight',
-    'product_node',
     'IndexedPriorityList',
     
     # Visualization

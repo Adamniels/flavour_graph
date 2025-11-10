@@ -405,17 +405,18 @@ python run_interactive.py
 
 ### Direkt import:
 ```python
-from src.core.main import setup_graph
+from src.core import setup_graph, create_priority_list_from_sales
 from src.interactive.generate_html import generate_html_visualization
 
 # Skapa graf
 G = setup_graph(min_edge_weight=5.0)
+priority_list = create_priority_list_from_sales(G)
 
 # Generera HTML
 generate_html_visualization(
     G,
-    output_path='output/interactive/my_graph.html',
-    title='Min Produktgraf'
+    priority_list,
+    output_file='output/interactive/my_graph.html'
 )
 ```
 
