@@ -6,16 +6,17 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
-import os
+from pathlib import Path
+from src.config import SUBCATEGORIES_FILE
 
 # Cache for loaded colors
 _SUBCATEGORY_COLORS_CACHE = None
 
-def load_subcategory_colors(excel_path: str = 'data/Subcategories.xlsx') -> dict:
+def load_subcategory_colors(excel_path: Path = None) -> dict:
     """Load subcategory colors from Excel file.
     
     Args:
-        excel_path: Path to the Subcategories.xlsx file
+        excel_path: Path to the Subcategories.xlsx file (default: from config.SUBCATEGORIES_FILE)
         
     Returns:
         dict: mapping from subcategory_name to color hex code
@@ -25,6 +26,10 @@ def load_subcategory_colors(excel_path: str = 'data/Subcategories.xlsx') -> dict
     # Return cached colors if already loaded
     if _SUBCATEGORY_COLORS_CACHE is not None:
         return _SUBCATEGORY_COLORS_CACHE
+    
+    # Use config path if not provided
+    if excel_path is None:
+        excel_path = SUBCATEGORIES_FILE
     
     try:
         df = pd.read_excel(excel_path)

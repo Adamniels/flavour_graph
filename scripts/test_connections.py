@@ -1,5 +1,5 @@
 """Test script to check connections between selected products."""
-from main import setup_graph, generate, create_priority_list_from_sales
+from src.core import setup_graph, generate, create_priority_list_from_sales
 
 # Create graphs
 print("Creating graphs...")
