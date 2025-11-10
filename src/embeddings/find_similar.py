@@ -191,22 +191,20 @@ Examples:
     # Visualize embeddings if requested
     if args.visualize:
         print("\n📊 Creating 2D visualization of embeddings (colored by subcategory)...")
-        # Use a subset of products for cleaner visualization
-        sample_nodes = list(G.nodes())[:100] if G.number_of_nodes() > 100 else list(G.nodes())
+        # Show all products - labels can be toggled off if too crowded
         embeddings.visualize_embeddings_2d(
-            product_ids=sample_nodes,
+            product_ids=None,  # None = all products
             method=args.vis_method,
-            show_labels=True,
+            show_labels=False,  # Too many labels would be messy with 1000+ products
             color_by_subcategory=True,
             save_path='output/embeddings/embeddings_visualization_2d.png'
         )
     
     if args.visualize_3d:
         print("\n📊 Creating 3D visualization of embeddings (interactive)...")
-        # Use more products for 3D (easier to navigate)
-        sample_nodes = list(G.nodes())[:200] if G.number_of_nodes() > 200 else list(G.nodes())
+        # Use ALL products - Plotly handles it well with interactivity
         embeddings.visualize_embeddings_3d(
-            product_ids=sample_nodes,
+            product_ids=None,  # None = all products
             method=args.vis_method,
             color_by_subcategory=True,
             save_path='output/embeddings/embeddings_visualization_3d.html'

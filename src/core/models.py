@@ -98,6 +98,20 @@ class IndexedPriorityList:
     def ids(self) -> List[str]:
         return [node_id for node_id, _ in self._items]
     
+    def get_prio(self, node_id: str) -> int:
+        """Get the priority value for a specific product.
+        
+        Args:
+            node_id: Product identifier
+            
+        Returns:
+            Priority value (int), or 0 if not found
+        """
+        for nid, val in self._items:
+            if nid == node_id:
+                return val
+        return 0
+    
     def half_prio(self, node_id: str):
         """Deprecated: Use reduce_prio_by_weight instead."""
         for i, (nid, val) in enumerate(self._items):

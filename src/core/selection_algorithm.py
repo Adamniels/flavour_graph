@@ -64,7 +64,7 @@ def generate(antal: int, G: nx.DiGraph = None, priorityList: IndexedPriorityList
         highest_prio_id = priorityList.ids()[0]
         
         # Get product name for logging
-        product_name = G.nodes[highest_prio_id].get('product_name', highest_prio_id)
+        product_name = G.nodes[highest_prio_id].get('name', highest_prio_id)
         current_prio = priorityList.get_prio(highest_prio_id)
         print(f"{i+1}. Selected: {product_name} (priority: {current_prio:.2f})")
         
