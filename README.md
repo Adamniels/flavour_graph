@@ -1,239 +1,257 @@
 # Flavour Graph
 
-Ett produktgraf-system för att representera och analysera relationer mellan produkter (t.ex. för vending machines).
+Ett produktgraf-system för att representera och analysera relationer mellan produkter.
 
-## Projektstruktur 📁
+## 📁 Projektstruktur
 
 ```
 flavour_graph/
 ├── src/                        # Källkod
-│   ├── core/                   # Kärnfunktionalitet
-│   │   ├── main.py            # Graf-setup och huvudlogik
-│   │   ├── models.py          # Datamodeller
-│   │   └── subcategory_colors.py
-│   │
-│   ├── interactive/            # Interaktiv HTML-visualisering
-│   │   └── generate_html.py  # Canvas-baserad visualisering
-│   │
-│   ├── embeddings/             # Node2Vec embeddings
-│   │   ├── embeddings.py      # ProductEmbeddings klass
-│   │   └── find_similar.py    # Similarity search
-│   │
-│   └── visualization/          # Graf-visualiseringar
-│       └── visualize.py       # Matplotlib visualiseringar
+│   ├── core/                   # Kärnfunktionalitet (graf, modeller)
+│   ├── interactive/            # HTML-visualiseringar
+│   ├── embeddings/             # Node2Vec embeddings & similarity
+│   └── visualization/          # Matplotlib visualiseringar
 │
 ├── scripts/                    # Utility scripts
-│   ├── convert_sales_to_user_pattern.py
-│   └── test_connections.py
-│
+├── data/                       # Data-filer
 ├── output/                     # Genererade filer
-│   ├── interactive/           # HTML visualiseringar
-│   ├── embeddings/            # Embeddings visualiseringar
-│   └── visualizations/        # Graf-visualiseringar
 │
-├── data/                       # Data och modeller
-├── run_interactive.py          # 🚀 Kör interaktiv HTML
-├── run_embeddings.py           # 🚀 Kör embeddings search
-├── run_visualization.py        # 🚀 Kör graf-visualisering
-├── requirements.txt
-└── README.md
+├── run_interactive.py          # → Generera interaktiv HTML
+├── run_embeddings.py           # → Hitta liknande produkter
+├── run_visualization.py        # → Rita grafen
+└── requirements.txt            # Dependencies
 ```
 
-## Snabbstart 🚀
+## 🚀 Installation & Setup
 
 ```bash
-# Installera dependencies
+# 1. Klona repository
+git clone https://github.com/Adamniels/flavour_graph.git
+cd flavour_graph
+
+# 2. Skapa virtual environment
+python3 -m venv venv
+source venv/bin/activate  # På macOS/Linux
+# eller: venv\Scripts\activate  # På Windows
+
+# 3. Installera dependencies
 pip install -r requirements.txt
+```
 
-# 1. Generera interaktiv HTML-visualisering
+## 💻 Kommandon
+
+### 1. Interaktiv HTML-visualisering
+Genererar en interaktiv produktgraf i HTML med zoom/pan och sökning.
+
+```bash
 python run_interactive.py
+```
 
-# 2. Hitta liknande produkter med embeddings
+**Output:** `output/interactive/interactive_selection.html`  
+→ Öppna filen i din webbläsare för att utforska grafen interaktivt.
+
+---
+
+### 2. Embeddings & Similarity Search
+Använder Node2Vec för att hitta liknande produkter baserat på grafstruktur.
+
+```bash
+# Hitta liknande produkter
+python run_embeddings.py
+
+# Med visualiseringar
+python run_embeddings.py --visualize              # 2D plot
+python run_embeddings.py --visualize-3d           # 3D interaktiv
+python run_embeddings.py --visualize-weights      # Viktbaserad 3D
+
+# Sök efter specifik produkt
+python run_embeddings.py --product-name "Coca Cola"
+python run_embeddings.py --product-id "07310350118342"
+
+# Träna om modellen
+python run_embeddings.py --retrain
+
+# Alla visualiseringar samtidigt
 python run_embeddings.py --visualize --visualize-3d --visualize-weights
+```
 
-# 3. Rita grafen med matplotlib
+**Output:**
+- `output/embeddings/embeddings_visualization_2d.png` - 2D t-SNE plot
+- `output/embeddings/embeddings_visualization_3d.html` - Interaktiv 3D
+- `output/embeddings/embeddings_visualization_weights.html` - Viktbaserad 3D
+
+---
+
+### 3. Graf-visualisering (Matplotlib)
+Skapar statiska visualiseringar av grafen.
+
+```bash
 python run_visualization.py
 ```
 
-## Genererade Filer 📁
+**Output:** Visar grafen i ett matplotlib-fönster
 
-Alla genererade filer sparas i separata undermappar under `output/`:
+---
 
-### Interaktiv HTML (`output/interactive/`)
-- `interactive_selection.html` - **Interaktiv produktvalsvisualisation** 🎯
-  - Genereras med: `python run_interactive.py`
-  - Canvas-baserad snabb rendering
-  - Klicka "Next Selection" för att välja produkter stegvis
-  - Visar grafkopplingar och prioritetsändringar i realtid
-  - Zoom och panorering med musen
+### 4. Utility Scripts
 
-### Embeddings (`output/embeddings/`)
-- `embeddings_visualization_2d.png` - 2D-plot av produktembeddings (t-SNE/PCA)
-- `embeddings_visualization_3d.html` - Interaktiv 3D plotly-visualisering
-- `embeddings_visualization_weights.html` - 3D-visualisering baserad på grafvikter
-  - Genereras med: `python run_embeddings.py --visualize --visualize-3d --visualize-weights`
-
-### Graf-visualiseringar (`output/visualizations/`)
-- Matplotlib-baserade grafer och visualiseringar
-  - Genereras med: `python run_visualization.py`
-
-## Användning
-
-### Grundläggande exempel
-
-```python
-from main import setup_graph, generate
-
-# Skapa grafen
-G = setup_graph()
-
-# Generera urval av produkter
-selected = generate(4, G)
-print(f"Valda produkter: {selected}")
-```
-
-### Visualisering
-
-```python
-from main import setup_graph, generate
-from visualize import draw_graph, print_graph_stats
-
-# Skapa och visa grafen
-G = setup_graph()
-print_graph_stats(G)
-
-# Rita grafen med markerade produkter
-selected = generate(4, G)
-draw_graph(G, highlight_nodes=selected, min_edge_weight=1.0)
-```
-
-### Köra direkt
+#### Konvertera Sales Data
+Analyserar kundköpsmönster och skapar produktrelationer.
 
 ```bash
-# Visa produkter och relationer
-python main.py
-
-# Visa graf-statistik och visualisering
-python visualize.py
-
-# Generera interaktiv HTML-visualisering 🆕
-python generate_interactive_html_fast.py
-
-# Hitta liknande produkter (Node2Vec embeddings) 🆕
-python find_similar_products.py
-python find_similar_products.py --product-name "Coca Cola"
-python find_similar_products.py --product-id "07310350118342" --topn 5
+python scripts/convert_sales_to_user_pattern.py
 ```
 
-## Graph Embeddings (Node2Vec) 🆕
+#### Testa Connections
+Kontrollerar kopplingar mellan valda produkter.
 
-Systemet använder **Node2Vec** för att skapa X-dimensionella vektorrepresentationer av produkter. Detta möjliggör:
-- 🔍 Snabb sökning efter liknande produkter
-- 📊 Kvantifiering av produktlikhet (cosine similarity)
-- 🎯 Rekommendationer baserade på grafstruktur
+```bash
+python scripts/test_connections.py
+```
 
-**📖 [Läs detaljerad förklaring: EMBEDDINGS_EXPLAINED.md](EMBEDDINGS_EXPLAINED.md)**
+---
 
-Denna guide förklarar:
-- Hur Node2Vec fungerar (random walks + Word2Vec)
-- Vad är Component 1, 2, 3 i visualiseringar?
-- Skillnad mellan t-SNE och weight-baserad visualisering
-- Praktiska exempel och användningsfall
-
-### Hur det fungerar
-
-Node2Vec skapar embeddings genom:
-1. **Random walks** på grafen (utforskar både bredd och djup)
-2. **Word2Vec** (Skip-gram) för att lära embeddings från walks
-3. Produkter med liknande grafpositioner → liknande vektorer
-
-Embeddings fångar:
-- Direkta kopplingar (vilka produkter är länkade)
-- Grafstruktur (kluster och communities)
-- Edge weights (starkare kopplingar = närmare i vektorrymd)
-
-### Användning av embeddings
+## 🔧 Använd som Python Module
 
 ```python
-from main import setup_graph
-from embeddings import ProductEmbeddings
+# Importera från core-modulen (refaktorerad struktur)
+from src.core import (
+    setup_graph,              # Skapa produktgraf
+    create_priority_list_from_sales,  # Prioritetslistor från försäljning
+    generate,                 # Produktvalalgoritm
+    Weight,                   # Viktmodell för kanter
+    IndexedPriorityList       # Prioritetskö
+)
 
-# Skapa och träna embeddings
-G = setup_graph()
+# Embeddings
+from src.embeddings.embeddings import ProductEmbeddings
+
+# HTML-visualisering
+from src.interactive.generate_html import generate_html_visualization
+
+# Matplotlib
+from src.visualization.visualize import draw_graph, print_graph_stats
+
+# === Exempel 1: Skapa och analysera graf ===
+G = setup_graph(min_edge_weight=5.0)
+print(f"Graf: {G.number_of_nodes()} noder, {G.number_of_edges()} kanter")
+
+# === Exempel 2: Välj produkter för varuautomat ===
+priority_list = create_priority_list_from_sales(G)
+selected_products = generate(antal=20, G=G, priorityList=priority_list)
+print(f"Valda {len(selected_products)} produkter")
+
+# === Exempel 3: Hitta liknande produkter ===
 embeddings = ProductEmbeddings(G, dimensions=64)
-embeddings.train(walk_length=30, num_walks=200)
+embeddings.train()
+similar = embeddings.find_similar(product_id="07310350118342", topn=10)
 
-# Hitta liknande produkter
-similar = embeddings.find_similar("07310350118342", topn=10)
-for product_id, similarity_score in similar:
-    print(f"{product_id}: {similarity_score:.3f}")
+# === Exempel 4: Generera visualiseringar ===
+# Interaktiv HTML
+generate_html_visualization(G, priority_list, output_file='output/interactive/my_graph.html')
 
-# Spara för senare användning
-embeddings.save("data/embeddings_model.pkl")
+# Matplotlib
+draw_graph(G, layout='spring', show=True)
 ```
 
-### Command-line verktyg
+### Core Module Structure (Ny refaktorerad arkitektur)
 
+Sedan version 2.0 är `src/core` uppdelad i fokuserade moduler:
+
+- **`graph_setup.py`** - High-level orchestration (`setup_graph`, `create_priority_list_from_sales`)
+- **`selection_algorithm.py`** - Produktvalsalgoritm (`generate`)
+- **`data_loaders.py`** - Fil-I/O operationer (JSON, Parquet)
+- **`parsers.py`** - Text-parsing utilities (ingredienser, EAN)
+- **`edge_weights.py`** - Likhetsberäkningar för grafkanter
+- **`connections.py`** - Graf-kopplingar (underkategori, ingrediens)
+- **`models.py`** - Dataklasser (`Weight`, `IndexedPriorityList`, etc.)
+- **`subcategory_colors.py`** - Färgmapping för visualiseringar
+
+Se **[src/core/README.md](src/core/README.md)** för fullständig dokumentation.
+
+---
+
+## 📊 Dokumentation
+
+### Modul-specifik dokumentation
+Varje modul har sin egen README med detaljerad information:
+
+- **[src/core/README.md](src/core/README.md)** - **NY!** Refaktorerad core-modul arkitektur
+  - Graph setup och orchestration
+  - Produktvalsalgoritm med penalty propagation
+  - Data loading och parsing
+  - Edge weight calculations
+  - Modellklasser (Weight, IndexedPriorityList)
+- **[src/embeddings/README.md](src/embeddings/README.md)** - Node2Vec algoritm och similarity search
+- **[src/interactive/README.md](src/interactive/README.md)** - Canvas rendering och interaktiv visualisering
+- **[src/visualization/README.md](src/visualization/README.md)** - Matplotlib graf-visualiseringar
+
+### Övergripande dokumentation
+- **[STRUCTURE.md](STRUCTURE.md)** - Detaljerad projektstruktur och arkitektur
+- **[EMBEDDINGS_EXPLAINED.md](EMBEDDINGS_EXPLAINED.md)** - Djupdykning i Node2Vec och embeddings
+- **[GENERATE_FILES.md](GENERATE_FILES.md)** - Guide för att generera visualiseringar
+
+---
+
+## 🏗️ Teknisk Stack
+
+- **NetworkX** - Graf-operationer och layout-algoritmer
+- **Node2Vec** - Graf embeddings för similarity search
+- **Gensim** - Word2Vec implementation för embeddings
+- **Matplotlib** - Statiska graf-visualiseringar
+- **Plotly** - Interaktiva 3D visualiseringar
+- **Pandas** - Data manipulation och analys
+- **scikit-learn** - Machine learning utilities (t-SNE, PCA)
+
+---
+
+## 📝 Features
+
+### Graf-skapande
+- ✅ Importera produktdata från JSON/Parquet
+- ✅ Skapar kanter baserat på:
+  - Ingrediens-likhet
+  - Användarmönster (co-purchase)
+  - Tag-matching
+- ✅ Viktade kanter för att representera relationsstyrka
+
+### Visualiseringar
+- ✅ **Interaktiv HTML** - Canvas-baserad med zoom/pan
+- ✅ **Embeddings 2D/3D** - t-SNE och viktbaserade plots
+- ✅ **Matplotlib grafer** - Statiska high-quality bilder
+
+### Similarity Search
+- ✅ Node2Vec embeddings
+- ✅ Cosine similarity
+- ✅ Hitta liknande produkter baserat på grafstruktur
+
+### Priority System
+- ✅ Skapar prioritetslistor från sales data
+- ✅ Dynamic selection-algoritm
+
+---
+
+## 🤝 Contributing
+
+Projektet är organiserat med tydlig separation of concerns:
+- `src/core/` - Kärnlogik som används av alla andra moduler
+- `src/embeddings/` - Allt relaterat till embeddings
+- `src/interactive/` - HTML-generering
+- `src/visualization/` - Matplotlib-visualiseringar
+
+Alla moduler har sina egna README-filer med detaljerad dokumentation.
+
+---
+
+## 👤 Author
+
+Adam Nielsen
+
+---
+
+**Snabbhjälp:**
 ```bash
-# Visa tillgängliga produkter
-python find_similar_products.py
-
-# Hitta liknande produkter med namn
-python find_similar_products.py --product-name "Snickers"
-
-# Hitta liknande produkter med ID
-python find_similar_products.py --product-id "07310350118342" --topn 5
-
-# Träna om embeddings (ta några minuter)
-python find_similar_products.py --retrain
-
-# Visualisera embeddings i 2D (t-SNE)
-python find_similar_products.py --visualize
+python run_interactive.py                    # Interaktiv HTML
+python run_embeddings.py --help              # Visa alla options
+python run_visualization.py                  # Matplotlib graf
 ```
-
-### Parametrar för Node2Vec
-
-- `dimensions`: Vektorstorlek (default: 64)
-- `walk_length`: Längd på random walks (default: 30)
-- `num_walks`: Antal walks per nod (default: 200)
-- `p`: Return parameter - styr sannolikhet att återvända till föregående nod
-- `q`: In-out parameter - styr exploration vs exploitation
-  - `q > 1`: håll nära startnod (BFS-liknande)
-  - `q < 1`: rör utåt (DFS-liknande)
-
-### API-funktioner
-
-```python
-# Hitta liknande produkter
-embeddings.find_similar(product_id, topn=10)
-
-# Beräkna similarity mellan två produkter
-similarity = embeddings.compute_similarity(prod1, prod2)
-
-# Hitta produkter liknande en grupp (genomsnitt av embeddings)
-avg_vector = embeddings.get_average_embedding([prod1, prod2, prod3])
-similar = embeddings.find_similar_by_vector(avg_vector, topn=10)
-
-# Visualisera embeddings i 2D
-embeddings.visualize_embeddings_2d(method='tsne')
-```
-
-## Grafstruktur
-
-**Noder** (produkter) har attribut:
-- `prio` - prioritet (heltal)
-- `tags` - lista med taggar
-- `ingredients` - lista med ingredienser
-
-**Edges** (relationer) har vikter:
-- `ingredient_match` - antal gemensamma ingredienser
-- `user_match` - historisk co-purchase data (placeholder)
-- `tag_match` - antal gemensamma taggar
-- `weight` - kombinerad viktning
-
-## NetworkX Fördelar
-
-- ✅ Enkel visualisering
-- ✅ Inbyggda grafalgorimer (shortest path, centrality, etc.)
-- ✅ Kan exportera till olika format (GraphML, JSON, etc.)
-- ✅ Stöd för både riktade och oriktade grafer

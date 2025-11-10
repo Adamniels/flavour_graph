@@ -12,8 +12,9 @@ Usage:
 import argparse
 import os
 from pathlib import Path
-from src.core.main import setup_graph
+from src.core import setup_graph
 from src.embeddings.embeddings import ProductEmbeddings
+from src.config import EMBEDDINGS_MODEL, DEFAULT_EMBEDDING_DIMENSIONS
 
 
 def find_similar_interactive(G, embeddings, product_id=None, product_name=None, topn=10):
@@ -156,13 +157,12 @@ Examples:
     print(f"✓ Graph loaded: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
     
     # Check if embeddings exist
-    embeddings_path = Path(__file__).parent / "data" / "embeddings_model.pkl"
     embeddings = ProductEmbeddings(G, dimensions=args.dimensions)
     
-    if embeddings_path.exists() and not args.retrain:
-        print(f"\n📂 Loading existing embeddings from {embeddings_path}")
+    if EMBEDDINGS_MODEL.exists() and not args.retrain:
+        print(f"\n📂 Loading existing embeddings from {EMBEDDINGS_MODEL}")
         try:
-            embeddings.load(str(embeddings_path))
+            embeddings.load()
             print("✓ Embeddings loaded successfully")
         except Exception as e:
             print(f"⚠️ Failed to load embeddings: {e}")
@@ -184,10 +184,9 @@ Examples:
             workers=4
         )
         
-        # Save embeddings
-        os.makedirs(embeddings_path.parent, exist_ok=True)
-        embeddings.save(str(embeddings_path))
-        print(f"💾 Embeddings saved to {embeddings_path}")
+        # Save embeddings (uses config paths by default)
+        embeddings.save()
+        print(f"💾 Embeddings saved to {EMBEDDINGS_MODEL}")
     
     # Visualize embeddings if requested
     if args.visualize:

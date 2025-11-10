@@ -4,9 +4,8 @@ Uses pure canvas rendering (no heavy libraries) for maximum performance.
 """
 import networkx as nx
 import json
-from src.core.main import setup_graph, create_priority_list_from_sales
-from src.core.models import IndexedPriorityList
-from src.core.subcategory_colors import get_subcategory_color, create_subcategory_colormap
+from src.core import setup_graph, create_priority_list_from_sales, IndexedPriorityList
+from src.core import get_subcategory_color, create_subcategory_colormap
 
 
 def generate_html_visualization(G: nx.DiGraph, priority_list: IndexedPriorityList, 

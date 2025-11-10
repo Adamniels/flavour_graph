@@ -2,7 +2,7 @@
 
 ## Översikt
 
-Projektet är nu organiserat i logiska moduler för bättre underhåll och skalbarhet.
+Projektet är organiserat i logiska moduler för bättre underhåll och skalbarhet.
 
 ## Mappstruktur
 

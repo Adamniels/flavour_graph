@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate interactive HTML visualization."""
 from src.interactive.generate_html import generate_html_visualization
-from src.core.main import setup_graph, create_priority_list_from_sales
+from src.core import setup_graph, create_priority_list_from_sales
 import sys
 from io import StringIO
 

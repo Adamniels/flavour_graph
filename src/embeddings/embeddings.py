@@ -21,20 +21,21 @@ from typing import List, Tuple, Optional, Dict
 import pickle
 import os
 from pathlib import Path
+from src.config import DEFAULT_EMBEDDING_DIMENSIONS, EMBEDDINGS_MODEL, EMBEDDINGS_WORD2VEC
 
 
 class ProductEmbeddings:
     """Manages Node2Vec embeddings for the flavor graph."""
     
-    def __init__(self, G: nx.DiGraph = None, dimensions: int = 64):
+    def __init__(self, G: nx.DiGraph = None, dimensions: int = None):
         """Initialize embeddings.
         
         Args:
             G: NetworkX graph (optional, can be loaded later)
-            dimensions: Dimensionality of the embedding vectors (default: 64)
+            dimensions: Dimensionality of the embedding vectors (default: from config.DEFAULT_EMBEDDING_DIMENSIONS)
         """
         self.G = G
-        self.dimensions = dimensions
+        self.dimensions = dimensions if dimensions is not None else DEFAULT_EMBEDDING_DIMENSIONS
         self.model = None
         self.node2vec = None
         
@@ -216,18 +217,25 @@ class ProductEmbeddings:
         except KeyError:
             return None
     
-    def save(self, filepath: str = "embeddings_model.pkl") -> None:
+    def save(self, filepath: Path = None) -> None:
         """Save the trained embeddings model to disk.
         
         Args:
-            filepath: Path to save the model
+            filepath: Path to save the model (default: from config.EMBEDDINGS_MODEL)
         """
+        if filepath is None:
+            filepath = EMBEDDINGS_MODEL
+            model_path = EMBEDDINGS_WORD2VEC
+        else:
+            # Support custom paths with .pkl/.model pairs
+            filepath = Path(filepath)
+            model_path = filepath.with_suffix('.model')
+            
         if self.model is None:
             raise ValueError("No model to save. Train first.")
         
         # Save the Word2Vec model
-        model_path = filepath.replace('.pkl', '_word2vec.model')
-        self.model.save(model_path)
+        self.model.save(str(model_path))
         
         # Save metadata
         metadata = {
@@ -241,27 +249,32 @@ class ProductEmbeddings:
         
         print(f"💾 Saved embeddings to {model_path} and metadata to {filepath}")
     
-    def load(self, filepath: str = "embeddings_model.pkl") -> None:
+    def load(self, filepath: Path = None) -> None:
         """Load a trained embeddings model from disk.
         
         Args:
-            filepath: Path to the saved model
+            filepath: Path to the saved model (default: from config.EMBEDDINGS_MODEL)
         """
         from gensim.models import Word2Vec
         
-        # Load Word2Vec model
-        model_path = filepath.replace('.pkl', '_word2vec.model')
+        if filepath is None:
+            filepath = EMBEDDINGS_MODEL
+            model_path = EMBEDDINGS_WORD2VEC
+        else:
+            # Support custom paths with .pkl/.model pairs
+            filepath = Path(filepath)
+            model_path = filepath.with_suffix('.model')
         
-        if not os.path.exists(model_path):
+        if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
         
-        self.model = Word2Vec.load(model_path)
+        self.model = Word2Vec.load(str(model_path))
         
         # Load metadata
-        if os.path.exists(filepath):
+        if filepath.exists():
             with open(filepath, 'rb') as f:
                 metadata = pickle.load(f)
-                self.dimensions = metadata.get('dimensions', 64)
+                self.dimensions = metadata.get('dimensions', DEFAULT_EMBEDDING_DIMENSIONS)
         
         print(f"📂 Loaded embeddings from {model_path}")
         print(f"   Dimensions: {self.dimensions}")
@@ -290,7 +303,7 @@ class ProductEmbeddings:
         import matplotlib.pyplot as plt
         from sklearn.manifold import TSNE
         from sklearn.decomposition import PCA
-        from src.core.subcategory_colors import get_subcategory_color
+        from src.core import get_subcategory_color
         
         # Get embeddings
         if product_ids is None:
@@ -374,7 +387,7 @@ class ProductEmbeddings:
             import plotly.graph_objects as go
             from sklearn.manifold import TSNE
             from sklearn.decomposition import PCA
-            from src.core.subcategory_colors import get_subcategory_color
+            from src.core import get_subcategory_color
         except ImportError:
             print("⚠️ plotly not installed. Install with: pip install plotly")
             return
@@ -487,7 +500,7 @@ class ProductEmbeddings:
         
         try:
             import plotly.graph_objects as go
-            from src.core.subcategory_colors import get_subcategory_color
+            from src.core import get_subcategory_color
         except ImportError:
             print("⚠️ plotly not installed. Install with: pip install plotly")
             return
@@ -661,7 +674,7 @@ def create_embeddings_from_graph(G: nx.DiGraph,
 
 if __name__ == "__main__":
     # Demo: Create embeddings from the flavor graph
-    from src.core.main import setup_graph
+    from src.core import setup_graph
     
     print("=" * 60)
     print("CREATING PRODUCT EMBEDDINGS WITH NODE2VEC")

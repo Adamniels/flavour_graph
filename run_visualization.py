@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run graph visualization."""
 from src.visualization.visualize import draw_graph, print_graph_stats
-from src.core.main import setup_graph, generate, create_priority_list_from_sales
+from src.core import setup_graph, generate, create_priority_list_from_sales
 
 
 def main():

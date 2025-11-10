@@ -2,7 +2,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 from typing import Optional, List
-from src.core.subcategory_colors import get_subcategory_color, create_subcategory_colormap
+from src.core import get_subcategory_color, create_subcategory_colormap
 
 
 def draw_graph(G: nx.DiGraph, 
@@ -431,7 +431,7 @@ def print_graph_stats(G: nx.DiGraph):
 
 if __name__ == "__main__":
     # Demo: visualize the graph
-    from src.core.main import setup_graph, generate, create_priority_list_from_sales
+    from src.core import setup_graph, generate, create_priority_list_from_sales
     
     print("Creating flavour graph...")
     G = setup_graph()
