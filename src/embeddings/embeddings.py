@@ -280,23 +280,203 @@ class ProductEmbeddings:
         print(f"   Dimensions: {self.dimensions}")
         print(f"   Vocabulary size: {len(self.model.wv)}")
     
-    def visualize_embeddings_2d(self, 
+    def visualize_embeddings_2d(self,
                                 product_ids: List[str] = None,
                                 method: str = 'tsne',
-                                figsize: tuple = (14, 10),
-                                show_labels: bool = True,
+                                figsize: tuple = (12, 10),
+                                show_labels: bool = False,
                                 save_path: str = None,
-                                color_by_subcategory: bool = True):
+                                color_by_subcategory: bool = True,
+                                interactive: bool = True):
         """Visualize embeddings in 2D using dimensionality reduction.
         
         Args:
             product_ids: List of product IDs to visualize (None = all)
             method: 'tsne' or 'pca' for dimensionality reduction
-            figsize: Figure size
-            show_labels: Whether to show product names as labels
+            figsize: Figure size (width, height) - used for matplotlib only
+            show_labels: If True, show product names as labels (matplotlib only)
             save_path: Path to save the figure (optional)
             color_by_subcategory: If True, color points by subcategory
+            interactive: If True, create interactive plotly visualization with hover info
         """
+        if self.model is None:
+            raise ValueError("Model not trained. Call train() first.")
+        
+        from sklearn.manifold import TSNE
+        from sklearn.decomposition import PCA
+        from src.core import get_subcategory_color
+        
+        # Get embeddings
+        if product_ids is None:
+            product_ids = list(self.model.wv.index_to_key)
+        
+        vectors = np.array([self.model.wv[pid] for pid in product_ids])
+        
+        # Reduce to 2D
+        print(f"Reducing {len(product_ids)} embeddings to 2D using {method.upper()}...")
+        if method == 'tsne':
+            reducer = TSNE(n_components=2, random_state=42, perplexity=min(30, len(product_ids)-1))
+        else:  # pca
+            reducer = PCA(n_components=2, random_state=42)
+        
+        coords_2d = reducer.fit_transform(vectors)
+        
+        if interactive:
+            # Create interactive plotly visualization
+            try:
+                import plotly.graph_objects as go
+                from collections import defaultdict
+                
+                if color_by_subcategory and self.G:
+                    subcategory_to_data = defaultdict(lambda: {'x': [], 'y': [], 'names': [], 'ids': [], 'info': []})
+                    
+                    for i, pid in enumerate(product_ids):
+                        subcategory = self.G.nodes[pid].get('subcategory', 'Unknown')
+                        name = self.G.nodes[pid].get('name', pid)
+                        
+                        # Build hover info with product details
+                        tags = self.G.nodes[pid].get('tags', [])
+                        ingredients = self.G.nodes[pid].get('ingredients', [])
+                        
+                        hover_text = f"<b>{name}</b><br>"
+                        hover_text += f"ID: {pid}<br>"
+                        hover_text += f"Category: {subcategory}<br>"
+                        if tags:
+                            hover_text += f"Tags: {', '.join(tags[:3])}"
+                            if len(tags) > 3:
+                                hover_text += f" (+{len(tags)-3} more)"
+                            hover_text += "<br>"
+                        if ingredients:
+                            ing_list = [ing if isinstance(ing, str) else str(ing) for ing in ingredients[:3]]
+                            hover_text += f"Ingredients: {', '.join(ing_list)}"
+                            if len(ingredients) > 3:
+                                hover_text += f" (+{len(ingredients)-3} more)"
+                        
+                        subcategory_to_data[subcategory]['x'].append(coords_2d[i, 0])
+                        subcategory_to_data[subcategory]['y'].append(coords_2d[i, 1])
+                        subcategory_to_data[subcategory]['names'].append(name)
+                        subcategory_to_data[subcategory]['ids'].append(pid)
+                        subcategory_to_data[subcategory]['info'].append(hover_text)
+                    
+                    # Create traces for each subcategory
+                    traces = []
+                    for subcategory, data in subcategory_to_data.items():
+                        color = get_subcategory_color(subcategory)
+                        
+                        trace = go.Scatter(
+                            x=data['x'],
+                            y=data['y'],
+                            mode='markers',
+                            name=subcategory,
+                            marker=dict(
+                                size=8,
+                                color=color,
+                                line=dict(color='white', width=0.5),
+                                opacity=0.8
+                            ),
+                            text=data['info'],
+                            hovertemplate='%{text}<extra></extra>'
+                        )
+                        traces.append(trace)
+                else:
+                    # Simple plot without colors
+                    names = [self.G.nodes[pid].get('name', pid) if self.G else pid for pid in product_ids]
+                    hover_texts = []
+                    for pid in product_ids:
+                        name = self.G.nodes[pid].get('name', pid) if self.G else pid
+                        hover_texts.append(f"<b>{name}</b><br>ID: {pid}")
+                    
+                    trace = go.Scatter(
+                        x=coords_2d[:, 0],
+                        y=coords_2d[:, 1],
+                        mode='markers',
+                        marker=dict(size=8, opacity=0.8),
+                        text=hover_texts,
+                        hovertemplate='%{text}<extra></extra>'
+                    )
+                    traces = [trace]
+                
+                # Create figure
+                fig = go.Figure(data=traces)
+                
+                fig.update_layout(
+                    title=f'Product Embeddings Visualization ({method.upper()})',
+                    xaxis_title='Component 1',
+                    yaxis_title='Component 2',
+                    width=1400,
+                    height=900,
+                    hovermode='closest',
+                    legend=dict(
+                        yanchor="top",
+                        y=0.99,
+                        xanchor="left",
+                        x=1.01
+                    )
+                )
+                
+                if save_path:
+                    # Save as HTML for interactive visualization
+                    html_path = str(save_path).replace('.png', '.html')
+                    fig.write_html(html_path)
+                    print(f"Saved interactive visualization to {html_path}")
+                
+                fig.show()
+                return  # Exit after showing interactive visualization
+                
+            except ImportError:
+                print("⚠️ plotly not installed. Falling back to matplotlib. Install with: pip install plotly")
+                interactive = False
+        
+        if not interactive:
+            # Fallback to matplotlib
+            import matplotlib.pyplot as plt
+            
+            # Get colors by subcategory if requested
+            if color_by_subcategory and self.G:
+                from collections import defaultdict
+                subcategory_to_products = defaultdict(list)
+                
+                for i, pid in enumerate(product_ids):
+                    subcategory = self.G.nodes[pid].get('subcategory', 'Unknown')
+                    subcategory_to_products[subcategory].append(i)
+                
+                # Plot
+                fig, ax = plt.subplots(figsize=figsize)
+                
+                # Plot each subcategory with its own color
+                for subcategory, indices in subcategory_to_products.items():
+                    color = get_subcategory_color(subcategory)
+                    subcat_coords = coords_2d[indices]
+                    ax.scatter(subcat_coords[:, 0], subcat_coords[:, 1], 
+                              c=[color], label=subcategory, alpha=0.7, s=80, edgecolors='white', linewidth=0.5)
+                
+                # Add legend
+                ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9, framealpha=0.9)
+            else:
+                # Simple plot without colors
+                fig, ax = plt.subplots(figsize=figsize)
+                ax.scatter(coords_2d[:, 0], coords_2d[:, 1], alpha=0.6, s=50)
+            
+            # Add labels
+            if show_labels and self.G:
+                for i, pid in enumerate(product_ids):
+                    name = self.G.nodes[pid].get('name', pid)
+                    # Truncate long names
+                    if len(name) > 25:
+                        name = name[:22] + '...'
+                    ax.annotate(name, (coords_2d[i, 0], coords_2d[i, 1]),
+                               fontsize=6, alpha=0.6)
+            
+            ax.set_title(f'Product Embeddings Visualization ({method.upper()})', fontsize=16, fontweight='bold')
+            ax.set_xlabel('Component 1', fontsize=12)
+            ax.set_ylabel('Component 2', fontsize=12)
+            plt.tight_layout()
+            
+            if save_path:
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+                print(f"Saved visualization to {save_path}")
+            
+            plt.show()
         if self.model is None:
             raise ValueError("Model not trained. Call train() first.")
         
@@ -410,17 +590,36 @@ class ProductEmbeddings:
         # Prepare data for plotly
         if color_by_subcategory and self.G:
             from collections import defaultdict
-            subcategory_to_data = defaultdict(lambda: {'x': [], 'y': [], 'z': [], 'names': [], 'ids': []})
+            subcategory_to_data = defaultdict(lambda: {'x': [], 'y': [], 'z': [], 'names': [], 'ids': [], 'info': []})
             
             for i, pid in enumerate(product_ids):
                 subcategory = self.G.nodes[pid].get('subcategory', 'Unknown')
                 name = self.G.nodes[pid].get('name', pid)
+                
+                # Build detailed hover info
+                tags = self.G.nodes[pid].get('tags', [])
+                ingredients = self.G.nodes[pid].get('ingredients', [])
+                
+                hover_text = f"<b>{name}</b><br>"
+                hover_text += f"ID: {pid}<br>"
+                hover_text += f"Category: {subcategory}<br>"
+                if tags:
+                    hover_text += f"Tags: {', '.join(tags[:3])}"
+                    if len(tags) > 3:
+                        hover_text += f" (+{len(tags)-3} more)"
+                    hover_text += "<br>"
+                if ingredients:
+                    ing_list = [ing if isinstance(ing, str) else str(ing) for ing in ingredients[:3]]
+                    hover_text += f"Ingredients: {', '.join(ing_list)}"
+                    if len(ingredients) > 3:
+                        hover_text += f" (+{len(ingredients)-3} more)"
                 
                 subcategory_to_data[subcategory]['x'].append(coords_3d[i, 0])
                 subcategory_to_data[subcategory]['y'].append(coords_3d[i, 1])
                 subcategory_to_data[subcategory]['z'].append(coords_3d[i, 2])
                 subcategory_to_data[subcategory]['names'].append(name)
                 subcategory_to_data[subcategory]['ids'].append(pid)
+                subcategory_to_data[subcategory]['info'].append(hover_text)
             
             # Create traces for each subcategory
             traces = []
@@ -439,22 +638,26 @@ class ProductEmbeddings:
                         line=dict(color='white', width=0.5),
                         opacity=0.8
                     ),
-                    text=[f"{name}<br>ID: {id_}<br>Category: {subcategory}" 
-                          for name, id_ in zip(data['names'], data['ids'])],
-                    hoverinfo='text'
+                    text=data['info'],
+                    hovertemplate='%{text}<extra></extra>'
                 )
                 traces.append(trace)
         else:
             # Simple plot without colors
-            names = [self.G.nodes[pid].get('name', pid) if self.G else pid for pid in product_ids]
+            hover_texts = []
+            for pid in product_ids:
+                name = self.G.nodes[pid].get('name', pid) if self.G else pid
+                hover_text = f"<b>{name}</b><br>ID: {pid}"
+                hover_texts.append(hover_text)
+            
             trace = go.Scatter3d(
                 x=coords_3d[:, 0],
                 y=coords_3d[:, 1],
                 z=coords_3d[:, 2],
                 mode='markers',
                 marker=dict(size=5, opacity=0.8),
-                text=[f"{name}<br>ID: {pid}" for name, pid in zip(names, product_ids)],
-                hoverinfo='text'
+                text=hover_texts,
+                hovertemplate='%{text}<extra></extra>'
             )
             traces = [trace]
         
@@ -551,17 +754,39 @@ class ProductEmbeddings:
         # Prepare data for plotly
         if color_by_subcategory:
             from collections import defaultdict
-            subcategory_to_data = defaultdict(lambda: {'x': [], 'y': [], 'z': [], 'names': [], 'ids': []})
+            subcategory_to_data = defaultdict(lambda: {'x': [], 'y': [], 'z': [], 'names': [], 'ids': [], 'info': []})
             
             for i, pid in enumerate(valid_products):
                 subcategory = self.G.nodes[pid].get('subcategory', 'Unknown')
                 name = self.G.nodes[pid].get('name', pid)
+                
+                # Build detailed hover info
+                tags = self.G.nodes[pid].get('tags', [])
+                ingredients = self.G.nodes[pid].get('ingredients', [])
+                
+                hover_text = f"<b>{name}</b><br>"
+                hover_text += f"ID: {pid}<br>"
+                hover_text += f"Category: {subcategory}<br><br>"
+                hover_text += f"<b>Average Weights:</b><br>"
+                hover_text += f"Ingredient Match: {weight_coords[i, 0]:.2f}<br>"
+                hover_text += f"User Co-purchase: {weight_coords[i, 1]:.2f}<br>"
+                hover_text += f"Tag Match: {weight_coords[i, 2]:.2f}<br>"
+                if tags:
+                    hover_text += f"<br>Tags: {', '.join(tags[:3])}"
+                    if len(tags) > 3:
+                        hover_text += f" (+{len(tags)-3} more)"
+                if ingredients:
+                    ing_list = [ing if isinstance(ing, str) else str(ing) for ing in ingredients[:3]]
+                    hover_text += f"<br>Ingredients: {', '.join(ing_list)}"
+                    if len(ingredients) > 3:
+                        hover_text += f" (+{len(ingredients)-3} more)"
                 
                 subcategory_to_data[subcategory]['x'].append(weight_coords[i, 0])
                 subcategory_to_data[subcategory]['y'].append(weight_coords[i, 1])
                 subcategory_to_data[subcategory]['z'].append(weight_coords[i, 2])
                 subcategory_to_data[subcategory]['names'].append(name)
                 subcategory_to_data[subcategory]['ids'].append(pid)
+                subcategory_to_data[subcategory]['info'].append(hover_text)
             
             # Create traces for each subcategory
             traces = []
@@ -580,15 +805,21 @@ class ProductEmbeddings:
                         line=dict(color='white', width=0.5),
                         opacity=0.8
                     ),
-                    text=[f"{name}<br>ID: {id_}<br>Category: {subcategory}<br>"
-                          f"Avg Ingredient: {x:.2f}<br>Avg User: {y:.2f}<br>Avg Tag: {z:.2f}" 
-                          for name, id_, x, y, z in zip(data['names'], data['ids'], 
-                                                         data['x'], data['y'], data['z'])],
-                    hoverinfo='text'
+                    text=data['info'],
+                    hovertemplate='%{text}<extra></extra>'
                 )
                 traces.append(trace)
         else:
             # Simple plot without colors
+            hover_texts = []
+            for i, pid in enumerate(valid_products):
+                name = self.G.nodes[pid].get('name', pid)
+                hover_text = f"<b>{name}</b><br>ID: {pid}<br><br>"
+                hover_text += f"Avg Ingredient: {weight_coords[i, 0]:.2f}<br>"
+                hover_text += f"Avg User: {weight_coords[i, 1]:.2f}<br>"
+                hover_text += f"Avg Tag: {weight_coords[i, 2]:.2f}"
+                hover_texts.append(hover_text)
+            
             names = [self.G.nodes[pid].get('name', pid) for pid in valid_products]
             trace = go.Scatter3d(
                 x=weight_coords[:, 0],
@@ -596,13 +827,8 @@ class ProductEmbeddings:
                 z=weight_coords[:, 2],
                 mode='markers',
                 marker=dict(size=5, opacity=0.8),
-                text=[f"{name}<br>ID: {pid}<br>"
-                      f"Avg Ingredient: {x:.2f}<br>Avg User: {y:.2f}<br>Avg Tag: {z:.2f}" 
-                      for name, pid, x, y, z in zip(names, valid_products,
-                                                     weight_coords[:, 0],
-                                                     weight_coords[:, 1],
-                                                     weight_coords[:, 2])],
-                hoverinfo='text'
+                text=hover_texts,
+                hovertemplate='%{text}<extra></extra>'
             )
             traces = [trace]
         
